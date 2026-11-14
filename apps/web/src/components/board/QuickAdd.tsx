@@ -1,7 +1,9 @@
 /**
  * Quick add for the board column.
  *
- * - `Enter` posts a single quest title and clears the input.
+ * - `Enter` posts a single quest title and clears the input. An Enter that
+ *   confirms an IME composition (Korean, Japanese, Chinese, …) is ignored so
+ *   the candidate is committed without posting the quest.
  * - Pasting two or more non-empty lines opens a confirmation dialog and posts
  *   the lines to the bulk endpoint instead of pasting them into the input.
  *
@@ -19,6 +21,7 @@ import type {
 import { bulkCreateQuests, createQuest } from "../../api/quests";
 import { ko } from "../../i18n/ko";
 import { parsePastedTitles } from "../../lib/format";
+import { isImeComposing } from "../../lib/ime";
 
 /** Props for {@link QuickAdd}. */
 export interface QuickAddProps {
@@ -71,10 +74,18 @@ export function QuickAdd({ projectId, inputRef }: QuickAddProps) {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      submitTitle();
+    if (event.key !== "Enter") {
+      return;
     }
+
+    // Always stop the implicit form submit; an Enter that confirms an IME
+    // composition only commits the candidate and must not post the quest.
+    event.preventDefault();
+    if (isImeComposing(event)) {
+      return;
+    }
+
+    submitTitle();
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLInputElement>) => {
