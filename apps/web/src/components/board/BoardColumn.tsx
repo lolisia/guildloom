@@ -1,7 +1,11 @@
 /**
- * One of the four board columns: a droppable stage lane with a sortable list of
+ * One of the four board columns: a sunken stage lane with a sortable list of
  * quest cards. The board column doubles as the droppable target when it is
  * empty, so cards can always be moved there.
+ *
+ * The header follows DESIGN.md: 32px stage icon, Galmuri11 title/count and a
+ * 2px underline in the stage colour (board=ink, dungeon=teal, boss=brick,
+ * cleared=gold).
  */
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -9,8 +13,19 @@ import type { QuestSummary } from "@guildloom/shared";
 import type { ReactNode } from "react";
 
 import { ko } from "../../i18n/ko";
+import { STAGE_ICON } from "../../lib/icons";
+import Icon from "../Icon";
+import { EmptyState } from "../ui";
 import QuestCard from "./QuestCard";
 import { columnDropId, type BoardStage } from "./movePlan";
+
+/** The 2px underline that marks each stage's header. */
+const STAGE_UNDERLINE: Record<BoardStage, string> = {
+  board: "border-ink",
+  dungeon: "border-teal",
+  boss: "border-brick",
+  cleared: "border-gold",
+};
 
 /** Props for {@link BoardColumn}. */
 export interface BoardColumnProps {
@@ -35,17 +50,18 @@ export function BoardColumn({
       ref={setNodeRef}
       data-stage={stage}
       aria-label={ko.board.columns[stage]}
-      className={`flex min-h-[16rem] flex-col rounded-2xl border bg-slate-950/40 p-2.5 transition-colors ${
-        isOver
-          ? "border-emerald-500/60 bg-emerald-500/5"
-          : "border-slate-800"
+      className={`flex min-h-64 flex-col gap-3 rounded-sm border-[1.5px] bg-sunken p-3 transition-colors ${
+        isOver ? "border-teal" : "border-line-strong"
       }`}
     >
-      <header className="mb-2 flex items-center justify-between gap-2 px-0.5">
-        <h2 className="truncate text-sm font-bold text-slate-200">
+      <header
+        className={`flex items-center gap-2 border-b-2 pb-2 ${STAGE_UNDERLINE[stage]}`}
+      >
+        <Icon name={STAGE_ICON[stage]} size={32} />
+        <h2 className="min-w-0 truncate font-pixel text-[16px] text-ink">
           {ko.board.columns[stage]}
         </h2>
-        <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">
+        <span className="ml-auto shrink-0 font-pixel text-[12px] text-muted">
           {ko.board.questCount(quests.length)}
         </span>
       </header>
@@ -58,9 +74,7 @@ export function BoardColumn({
       >
         <div className="flex flex-1 flex-col gap-2">
           {quests.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-slate-800 px-2 py-4 text-center text-[11px] text-slate-600">
-              {ko.board.emptyColumn}
-            </p>
+            <EmptyState icon="empty" text={ko.board.emptyColumn} />
           ) : (
             quests.map((quest) => (
               <QuestCard

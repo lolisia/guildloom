@@ -1,19 +1,25 @@
 /**
- * A single draggable quest card.
+ * A single draggable quest card: a paper request sheet pinned to the board.
  *
  * The whole card is the drag activator (pointer/touch sensors) and also opens
  * the quest drawer when clicked. It renders the shared card information:
- * `#number`, title, tag chips, an optional rank badge, relative creation time
+ * the pixel `#number`, rank insignia, title, tag chips, relative creation time
  * and the creator's adventurer sprite.
+ *
+ * Only the card being dragged is lifted off the wall: DESIGN.md's hard
+ * `4px 4px 0 ink` shadow plus a `translate(-2px, -2px)` paper-lift. Resting
+ * cards have no shadow at all.
  */
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { QuestSummary } from "@guildloom/shared";
-import type { KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 
 import { ko } from "../../i18n/ko";
 import { formatKoreanDate, relativeTime } from "../../lib/format";
 import AdventurerSprite from "../AdventurerSprite";
+import RankBadge from "../RankBadge";
+import { Chip } from "../ui";
 
 /** Props for {@link QuestCard}. */
 export interface QuestCardProps {
@@ -40,13 +46,27 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
     }
   };
 
+  const dragTransform = CSS.Transform.toString(transform);
+  const style: CSSProperties = {
+    transition: isDragging ? undefined : transition,
+  };
+  if (dragTransform) {
+    style.transform = dragTransform;
+  }
+  if (isDragging) {
+    // Combine the dnd-kit transform with the lift so the card keeps following
+    // the pointer while sitting 2px up and to the left.
+    style.transform = dragTransform
+      ? `${dragTransform} translate(-2px, -2px)`
+      : "translate(-2px, -2px)";
+    style.boxShadow = "4px 4px 0 var(--color-ink)";
+    style.zIndex = 10;
+  }
+
   return (
     <article
       ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
+      style={style}
       {...attributes}
       {...listeners}
       role="button"
@@ -56,26 +76,18 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
       data-stage={quest.stage}
       onClick={() => onOpen(quest.id)}
       onKeyDown={handleKeyDown}
-      className={`cursor-grab touch-none select-none space-y-2 rounded-xl border border-slate-800 bg-slate-900 p-3 text-left shadow-sm transition-colors hover:border-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 ${
-        isDragging ? "z-10 cursor-grabbing opacity-60" : ""
+      className={`flex cursor-grab touch-none select-none flex-col gap-2 rounded-sm border-[1.5px] border-line-strong bg-paper px-[14px] py-3 text-left transition-colors ${
+        isDragging ? "relative cursor-grabbing" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-[11px] font-bold tracking-wide text-slate-500">
+        <span className="font-pixel text-[12px] text-muted">
           #{quest.number}
         </span>
-        {quest.rank ? (
-          <span
-            aria-label={`${ko.quest.rank} ${quest.rank}`}
-            data-rank={quest.rank}
-            className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-black text-amber-300"
-          >
-            {quest.rank}
-          </span>
-        ) : null}
+        <RankBadge rank={quest.rank} size={32} />
       </div>
 
-      <h3 className="text-sm font-semibold leading-snug text-slate-100">
+      <h3 className="text-[15px] font-semibold leading-snug text-ink">
         {quest.title}
       </h3>
 
@@ -83,9 +95,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
         <ul className="flex flex-wrap gap-1" aria-label={ko.quest.tags}>
           {quest.tags.map((tag) => (
             <li key={tag}>
-              <span className="inline-block rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300">
-                {tag}
-              </span>
+              <Chip>{tag}</Chip>
             </li>
           ))}
         </ul>
@@ -95,7 +105,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
         <time
           dateTime={new Date(quest.createdAt).toISOString()}
           title={formatKoreanDate(quest.createdAt)}
-          className="text-[11px] text-slate-500"
+          className="text-[12px] text-muted"
         >
           {relativeTime(quest.createdAt)}
         </time>
