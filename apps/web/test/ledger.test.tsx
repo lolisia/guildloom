@@ -2,8 +2,8 @@
 /**
  * Ledger table tests: the eight exact columns, the design-system table surface
  * (sunken header, line separators), stage/rank/avatar cells, text/tag/search
- * filtering, client-side header sorting, CSV export and opening the shared
- * quest drawer from a row.
+ * filtering, client-side header sorting and opening the shared quest drawer
+ * from a row.
  *
  * As in the other DOM tests, jsdom is installed manually because Vitest cannot
  * resolve the workspace-local copy from the hoisted runner.
@@ -396,65 +396,6 @@ describe("LedgerPage", () => {
       ),
     );
     expect(createdAtHeader.querySelector("img")).toBeNull();
-  });
-
-  it("exports the visible ledger as a CSV download", async () => {
-    stubFetch(defaultHandler());
-    const { user } = renderLedger();
-
-    await screen.findByText("Alpha");
-
-    const createObjectURL = vi.fn((_blob: Blob) => "blob:guildloom-ledger");
-    const revokeObjectURL = vi.fn((_url: string) => {});
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      value: createObjectURL,
-    });
-    Object.defineProperty(URL, "revokeObjectURL", {
-      configurable: true,
-      value: revokeObjectURL,
-    });
-    const click = vi
-      .spyOn(HTMLAnchorElement.prototype, "click")
-      .mockImplementation(() => {});
-
-    try {
-      const exportButton = screen.getByRole("button", {
-        name: ko.ledger.exportCsv,
-      });
-      expect(exportButton.querySelector("img")).toHaveAttribute(
-        "src",
-        expect.stringContaining("download.png"),
-      );
-
-      await user.click(exportButton);
-
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
-      const blob = createObjectURL.mock.calls[0]?.[0] as Blob;
-      expect(blob.type).toBe("text/csv;charset=utf-8");
-      const csv = await blob.text();
-      expect(csv.replace("\uFEFF", "")).toContain(
-        Object.values(ko.ledger.columns).join(","),
-      );
-      expect(csv).toContain("Alpha");
-      expect(csv).toContain("Beta");
-      expect(csv).toContain("Gamma");
-      expect(csv).toContain(ko.quest.stages.board);
-      expect(csv).toContain(formatKoreanDate(QUESTS[0]!.createdAt));
-
-      const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
-      expect(anchor.download).toBe("guildloom-ledger-1.csv");
-      expect(anchor.href).toContain("blob:guildloom-ledger");
-      await waitFor(() =>
-        expect(revokeObjectURL).toHaveBeenCalledWith(
-          "blob:guildloom-ledger",
-        ),
-      );
-    } finally {
-      delete (URL as unknown as Record<string, unknown>).createObjectURL;
-      delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
-      click.mockRestore();
-    }
   });
 
   it("filters by tag and sends the tag to the list endpoint", async () => {

@@ -108,48 +108,6 @@ function compareQuests(
   }
 }
 
-/** Quote one CSV field when it contains a delimiter, quote or line break. */
-function csvField(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
-}
-
-/** Serialize the visible ledger rows (header row included) as CSV. */
-function buildLedgerCsv(quests: readonly QuestSummary[]): string {
-  const rows = [
-    LEDGER_COLUMNS.map((column) => ko.ledger.columns[column]),
-    ...quests.map((quest) => [
-      `#${quest.number}`,
-      quest.title,
-      quest.tags.join(" "),
-      ko.quest.stages[quest.stage],
-      quest.rank ?? "",
-      quest.createdBy.displayName,
-      formatKoreanDate(quest.createdAt),
-      formatKoreanDate(quest.updatedAt),
-    ]),
-  ];
-
-  return rows.map((cells) => cells.map(csvField).join(",")).join("\r\n");
-}
-
-/** Hand the CSV to the browser as a file named after the guild. */
-function downloadLedgerCsv(projectId: number, csv: string): void {
-  // The BOM keeps Excel from mis-reading the Korean column headers.
-  const blob = new Blob([`\uFEFF${csv}`], {
-    type: "text/csv;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `guildloom-ledger-${projectId}.csv`;
-  anchor.rel = "noopener";
-  // Some browsers only follow a download when the anchor is in the document.
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 /** The quest ledger table. */
 export default function LedgerPage() {
   const { projectId: projectIdParam } = useParams<{ projectId: string }>();
@@ -240,10 +198,6 @@ export default function LedgerPage() {
     setSelectedStages([...STAGES]);
   };
 
-  const exportCsv = () => {
-    downloadLedgerCsv(projectId, buildLedgerCsv(sortedQuests));
-  };
-
   const openQuest = useCallback(
     (questId: number) => {
       setSearchParams((previous) => {
@@ -278,16 +232,10 @@ export default function LedgerPage() {
 
   return (
     <section className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-ink">{ko.ledger.title}</h1>
-          <p className="text-sm text-muted">{ko.ledger.description}</p>
-          <p className="text-xs text-muted">{ko.ledger.sortHint}</p>
-        </div>
-        <Button variant="secondary" onClick={exportCsv}>
-          <Icon name="download" size={32} />
-          {ko.ledger.exportCsv}
-        </Button>
+      <header className="space-y-1">
+        <h1 className="text-xl font-semibold text-ink">{ko.ledger.title}</h1>
+        <p className="text-sm text-muted">{ko.ledger.description}</p>
+        <p className="text-xs text-muted">{ko.ledger.sortHint}</p>
       </header>
 
       <Panel className="flex flex-wrap items-end gap-3">
