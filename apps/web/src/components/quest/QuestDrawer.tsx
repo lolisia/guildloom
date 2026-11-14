@@ -3,12 +3,15 @@
  * `?quest=<id>` URL query.
  *
  * The drawer owns the detail and event queries for one quest, inline edits
- * (title, rank, tags, situation, direction) and the archive flow. Mutations
- * update the quest cache from the server response and invalidate the board and
- * ledger lists so cards stay in sync.
+ * (title, rank, tags, situation, direction) and the archive flow. Scalar
+ * mutations update the quest cache from the server response and invalidate the
+ * board and ledger lists so cards stay in sync. Tags go through a dedicated
+ * optimistic mutation so rapid chip edits accumulate locally instead of
+ * racing stale server state.
  */
 import {
   RANKS,
+  type Quest,
   type QuestSummary,
   type Rank,
   type UpdateQuestRequest,
@@ -25,6 +28,7 @@ import {
   updateQuest,
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
+import { isImeComposing } from "../../lib/ime";
 import { queryKeys } from "../../lib/queryKeys";
 import AdventurerSprite from "../AdventurerSprite";
 import EditableTextSection from "./EditableTextSection";
@@ -37,6 +41,11 @@ export interface QuestDrawerProps {
   questId: number;
   /** Closes the drawer, typically by removing the `quest` search param. */
   onClose: () => void;
+}
+
+/** Snapshot needed to roll an optimistic tag edit back on failure. */
+interface TagMutationContext {
+  previous: Quest | undefined;
 }
 
 /** Slide-over quest detail panel. */
@@ -100,6 +109,46 @@ export function QuestDrawer({
     },
   });
 
+  /**
+   * Tag edits are optimistic: each call carries the full cumulative list, the
+   * cache is patched before the request leaves and rolled back on failure. The
+   * PATCH response is deliberately ignored — a slow earlier response must not
+   * overwrite tags added after it.
+   */
+  const tagMutation = useMutation<Quest, Error, string[], TagMutationContext>({
+    mutationFn: (tags) => updateQuest(questId, { tags }),
+    onMutate: async (nextTags) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.quest(questId) });
+      const previous = queryClient.getQueryData<Quest>(
+        queryKeys.quest(questId),
+      );
+      if (previous) {
+        queryClient.setQueryData<Quest>(queryKeys.quest(questId), {
+          ...previous,
+          tags: nextTags,
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _nextTags, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.quest(questId), context.previous);
+      }
+    },
+    onSettled: () => {
+      // Mark the detail stale for the next natural fetch instead of refetching
+      // now: an immediate refetch can resolve while a newer tag edit is still
+      // optimistic and overwrite that newer list. The tag autocomplete and
+      // board lists are safe to refresh right away.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.quest(questId),
+        refetchType: "none",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["tags", projectId] });
+      void queryClient.invalidateQueries({ queryKey: ["quests", projectId] });
+    },
+  });
+
   const archiveMutation = useMutation({
     mutationFn: () => archiveQuest(questId, { reason: "dropped" }),
     onSuccess: (archivedQuest) => {
@@ -142,16 +191,7 @@ export function QuestDrawer({
   };
 
   const changeTags = (nextTags: string[]) => {
-    updateMutation.mutate(
-      { tags: nextTags },
-      {
-        onSuccess: () => {
-          void queryClient.invalidateQueries({
-            queryKey: ["tags", projectId],
-          });
-        },
-      },
-    );
+    tagMutation.mutate(nextTags);
   };
 
   const overlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
@@ -250,6 +290,9 @@ export function QuestDrawer({
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
+                        if (isImeComposing(event)) {
+                          return;
+                        }
                         commitTitle();
                       }
                     }}

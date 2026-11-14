@@ -22,6 +22,7 @@ import AdventurerSprite from "../components/AdventurerSprite";
 import QuestDrawer from "../components/quest/QuestDrawer";
 import { ko } from "../i18n/ko";
 import { formatKoreanDate } from "../lib/format";
+import { isImeComposing } from "../lib/ime";
 import { queryKeys } from "../lib/queryKeys";
 
 /** The eight ledger columns, in display order. */
@@ -379,10 +380,14 @@ export default function LedgerPage() {
                 tabIndex={0}
                 onClick={() => openQuest(quest.id)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    openQuest(quest.id);
+                  // Ignore the Enter that confirms an IME candidate (Korean,
+                  // Japanese, …): opening the drawer mid-composition loses the
+                  // text the user is still typing.
+                  if (event.key !== "Enter" || isImeComposing(event)) {
+                    return;
                   }
+                  event.preventDefault();
+                  openQuest(quest.id);
                 }}
                 className="cursor-pointer border-b border-slate-800/60 bg-slate-950/30 align-middle hover:bg-slate-900/70 focus-visible:bg-slate-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
               >

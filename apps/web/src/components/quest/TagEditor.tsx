@@ -10,6 +10,7 @@ import { useState } from "react";
 
 import { fetchTags } from "../../api/quests";
 import { ko } from "../../i18n/ko";
+import { isImeComposing } from "../../lib/ime";
 import { queryKeys } from "../../lib/queryKeys";
 
 /** Props for {@link TagEditor}. */
@@ -96,6 +97,11 @@ export function TagEditor({
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
+              // Confirming an IME candidate also fires Enter; adding the tag
+              // then would submit a half-composed word.
+              if (isImeComposing(event)) {
+                return;
+              }
               addTag(query);
             }
           }}

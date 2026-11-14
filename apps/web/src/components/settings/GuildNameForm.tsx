@@ -7,10 +7,11 @@
 import type { ProjectDetailResponse } from "@guildloom/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 
 import { updateProject } from "../../api/projects";
 import { ko } from "../../i18n/ko";
+import { isImeComposing } from "../../lib/ime";
 import { queryKeys } from "../../lib/queryKeys";
 import { apiErrorMessage } from "../auth/apiErrorMessage";
 import FormAlert from "../auth/FormAlert";
@@ -61,6 +62,14 @@ export function GuildNameForm({
     setError(null);
   };
 
+  // A composition Enter must not implicitly submit the single-input form; a
+  // regular Enter still submits the rename.
+  const handleNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && isImeComposing(event)) {
+      event.preventDefault();
+    }
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (renameMutation.isPending) {
@@ -104,6 +113,7 @@ export function GuildNameForm({
           label={ko.settings.guildName}
           value={name}
           onChange={handleChange}
+          onKeyDown={handleNameKeyDown}
           placeholder={ko.settings.guildNamePlaceholder}
           maxLength={40}
           required
