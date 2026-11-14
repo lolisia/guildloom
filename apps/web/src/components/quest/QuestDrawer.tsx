@@ -9,8 +9,9 @@
  * optimistic mutation so rapid chip edits accumulate locally instead of
  * racing stale server state.
  *
- * Layout follows DESIGN.md: the page is dimmed with ink at 40% (never a blur)
- * and a paper panel slides in from the right behind a 1.5px line-strong rule.
+ * Layout follows DESIGN.md: the page is dimmed with the theme-aware `scrim`
+ * token (never a blur) and a paper panel slides in from the right behind a
+ * 1.5px line-strong rule.
  */
 import {
   RANKS,
@@ -217,7 +218,7 @@ export function QuestDrawer({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex justify-end bg-ink/40"
+      className="fixed inset-0 z-40 flex justify-end bg-scrim"
       onMouseDown={overlayMouseDown}
     >
       <aside
@@ -432,7 +433,7 @@ export function QuestDrawer({
 
       {confirmArchive ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           data-archive-confirm="true"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
