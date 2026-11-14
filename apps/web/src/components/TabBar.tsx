@@ -302,7 +302,7 @@ export function TabBar() {
       {isCreateOpen
         ? createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
               onMouseDown={handleOverlayMouseDown}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {

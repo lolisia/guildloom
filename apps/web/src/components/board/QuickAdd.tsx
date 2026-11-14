@@ -145,7 +145,7 @@ export function QuickAdd({ projectId, inputRef }: QuickAddProps) {
 
       {bulkTitles ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               cancelBulk();

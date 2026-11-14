@@ -288,7 +288,7 @@ describe("quick add bulk paste", () => {
     );
     expect(dialog.className).not.toContain("rounded-2xl");
     expect(dialog.className).not.toContain("backdrop-blur");
-    expect(dialog.parentElement).toHaveClass("bg-ink/40");
+    expect(dialog.parentElement).toHaveClass("bg-scrim");
 
     await user.click(
       within(dialog).getByRole("button", { name: ko.common.cancel }),

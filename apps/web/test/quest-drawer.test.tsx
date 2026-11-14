@@ -248,11 +248,11 @@ afterEach(() => {
 });
 
 describe("QuestDrawer design", () => {
-  it("dims with ink, opens a paper panel and closes with the close icon", async () => {
+  it("dims with scrim, opens a paper panel and closes with the close icon", async () => {
     const { dialog } = await openDrawer();
     const overlay = dialog.parentElement as HTMLElement;
 
-    expect(overlay.className).toContain("bg-ink/40");
+    expect(overlay.className).toContain("bg-scrim");
     expect(overlay.className).not.toMatch(/blur/);
 
     expect(dialog).toHaveAttribute("aria-modal", "true");

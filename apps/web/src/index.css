@@ -14,6 +14,12 @@
   --color-paper: #FAFAF6;
   --color-sunken: #DEE2DA;
   --color-ink: #1F2429;
+  /*
+   * Modal/drawer backdrop. The alpha is baked into the token, so consumers use
+   * plain `bg-scrim` (never `bg-scrim/40`) and only this pair of values changes
+   * between themes.
+   */
+  --color-scrim: rgb(31 36 41 / 0.40);
   --color-muted: #545C64;
   --color-line: #C3C9C0;
   --color-line-strong: #1F2429;
@@ -47,6 +53,8 @@
   --color-paper: #23232F;
   --color-sunken: #14141C;
   --color-ink: #EDE3CF;
+  /* Near-black backdrop, darker than the #191923 ground once composited. */
+  --color-scrim: rgb(8 8 12 / 0.60);
   --color-muted: #A69F96;
   --color-line: #3A3946;
   --color-line-strong: #5C5866;
