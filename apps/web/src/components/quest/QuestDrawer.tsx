@@ -144,6 +144,13 @@ export function QuestDrawer({
         queryKey: queryKeys.quest(questId),
         refetchType: "none",
       });
+      // The server records a `quest_edited` event for a successful tag PATCH;
+      // refresh the adventure log so the drawer shows it without being
+      // reopened. A failed PATCH leaves the server history unchanged, so the
+      // extra refetch is harmless there too.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.events(questId),
+      });
       void queryClient.invalidateQueries({ queryKey: ["tags", projectId] });
       void queryClient.invalidateQueries({ queryKey: ["quests", projectId] });
     },
