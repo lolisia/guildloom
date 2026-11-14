@@ -21,6 +21,7 @@ import {
 
 import { fetchMe, fetchSetupStatus } from "./api/auth";
 import AppLayout from "./components/AppLayout";
+import { Button } from "./components/ui";
 import { ko } from "./i18n/ko";
 import { queryKeys } from "./lib/queryKeys";
 import BoardPage from "./routes/BoardPage";
@@ -52,7 +53,7 @@ function LoadingScreen() {
   return (
     <div
       role="status"
-      className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400"
+      className="flex min-h-screen items-center justify-center bg-ground px-4 font-body text-sm text-ink"
     >
       {ko.common.loading}
     </div>
@@ -61,15 +62,11 @@ function LoadingScreen() {
 
 function ShellErrorScreen({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 px-4 text-center">
-      <p className="text-sm text-rose-300">{ko.errors.loadFailed}</p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-      >
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-ground px-4 text-center font-body text-ink">
+      <p className="text-sm text-brick">{ko.errors.loadFailed}</p>
+      <Button variant="secondary" icon="refresh" onClick={onRetry}>
         {ko.common.retry}
-      </button>
+      </Button>
     </div>
   );
 }

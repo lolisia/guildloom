@@ -76,7 +76,7 @@ surface.self = surface;
 surface.top = surface;
 surface.parent = surface;
 
-const { cleanup, render, waitFor, within } = await import(
+const { cleanup, fireEvent, render, waitFor, within } = await import(
   "@testing-library/react"
 );
 const userEvent = (await import("@testing-library/user-event")).default;
@@ -335,6 +335,105 @@ describe("RootRedirect", () => {
     const view = renderApp("/", { me: HERO });
     await expectPath(view, "/g/1");
   });
+
+  it("renders the guild empty state when no projects exist", async () => {
+    const view = renderApp("/", { me: HERO, projects: [] });
+
+    const message = await view.findByText(ko.common.noProjects);
+    expect(view.getByText(ko.common.noProjectsHint)).toBeInTheDocument();
+
+    const icon = message.closest("div")?.querySelector("img");
+    expect(icon?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/64/guild.png",
+    );
+    expect(icon).toHaveAttribute("width", "64");
+  });
+
+  it("renders the project-load error in the route body with a token retry", async () => {
+    const view = renderApp("/", {
+      me: HERO,
+      handlers: {
+        "GET /api/projects": () => ({
+          status: 500,
+          body: {
+            error: { code: "unexpected_error", message: "projects down" },
+          },
+        }),
+      },
+    });
+
+    await waitFor(() => {
+      expect(view.container.querySelector("main")).not.toBeNull();
+    });
+    const main = view.container.querySelector("main") as HTMLElement;
+    const message = await within(main).findByText(ko.errors.loadFailed);
+    expect(message.className).toContain("text-brick");
+
+    const retry = within(main).getByRole("button", { name: ko.common.retry });
+    expect(retry.className).toContain("bg-paper");
+    expect(retry.className).toContain("border-line-strong");
+
+    await view.user.click(retry);
+    await waitFor(() => {
+      const projectReads = view.fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url) === "/api/projects" &&
+          (init?.method ?? "GET") === "GET",
+      );
+      expect(projectReads.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+});
+
+describe("shell route states", () => {
+  it("renders the loading state with design tokens", async () => {
+    const view = renderApp("/login", {
+      me: null,
+      handlers: {
+        "GET /api/setup/status": () => new Promise<MockReply>(() => {}),
+      },
+    });
+
+    const status = await view.findByRole("status");
+    expect(status.className).toContain("bg-ground");
+    expect(status.className).toContain("font-body");
+    expect(status.className).toContain("text-ink");
+    expect(status).toHaveTextContent(ko.common.loading);
+  });
+
+  it("renders the shell error with a secondary retry button", async () => {
+    const view = renderApp("/login", {
+      me: null,
+      handlers: {
+        "GET /api/setup/status": () => ({
+          status: 500,
+          body: {
+            error: { code: "unexpected_error", message: "setup down" },
+          },
+        }),
+      },
+    });
+
+    const message = await view.findByText(ko.errors.loadFailed);
+    expect(message.className).toContain("text-brick");
+
+    const screen = message.parentElement as HTMLElement;
+    expect(screen.className).toContain("bg-ground");
+    expect(screen.className).toContain("font-body");
+    expect(screen.className).toContain("text-ink");
+
+    const retry = within(screen).getByRole("button", { name: ko.common.retry });
+    expect(retry.className).toContain("bg-paper");
+    expect(retry.className).toContain("border-line-strong");
+
+    await view.user.click(retry);
+    await waitFor(() => {
+      const setupReads = view.fetchMock.mock.calls.filter(
+        ([url]) => String(url) === "/api/setup/status",
+      );
+      expect(setupReads.length).toBeGreaterThanOrEqual(2);
+    });
+  });
 });
 
 describe("TabBar", () => {
@@ -345,8 +444,13 @@ describe("TabBar", () => {
     const other = view.getByRole("link", { name: "별빛 길드" });
     expect(active).toHaveAttribute("aria-current", "page");
     expect(active).toHaveAttribute("data-role", "owner");
+    expect(active.className).toContain("border-[1.5px]");
+    expect(active.className).toContain("border-line-strong");
+    expect(active.className).toContain("bg-ground");
     expect(other).not.toHaveAttribute("aria-current");
     expect(other).toHaveAttribute("data-role", "member");
+    expect(other.className).not.toContain("border-");
+    expect(other.className).toContain("hover:bg-sunken");
   });
 
   it("shows the sprite, display name, Lv.N and XP progress", async () => {
@@ -359,13 +463,171 @@ describe("TabBar", () => {
     expect(sprite).toHaveAttribute("data-state", "idle");
 
     expect(view.getByText(HERO.displayName)).toBeInTheDocument();
-    expect(view.getByText(ko.tabs.level(2))).toBeInTheDocument();
+    const levelBadge = view.getByText(ko.tabs.level(2));
+    expect(levelBadge).toBeInTheDocument();
+    expect(levelBadge.className).toContain("font-pixel");
+    expect(levelBadge.className).toContain("text-gold");
 
     const progressbar = view.getByRole("progressbar", {
       name: ko.tabs.xpLabel,
     });
+    expect(progressbar).toHaveAttribute("aria-valuemin", "0");
     expect(progressbar).toHaveAttribute("aria-valuenow", "50");
     expect(progressbar).toHaveAttribute("aria-valuemax", "200");
+    expect(progressbar).toHaveAttribute("title", ko.tabs.xp(50, 200));
+    expect(progressbar.className).toContain("h-2");
+    expect(progressbar.className).toContain("border-[1.5px]");
+    expect(progressbar.className).toContain("border-line-strong");
+
+    const fill = progressbar.firstElementChild as HTMLElement;
+    expect(fill.className).toContain("bg-gold-fill");
+    expect(fill).toHaveStyle({ width: "25%" });
+  });
+
+  it("renders a paper top bar with outlined guild and view tabs", async () => {
+    const view = renderApp("/g/1", { me: HERO });
+    await view.findByRole("link", { name: "달빛 길드" });
+
+    const header = view.container.querySelector("header") as HTMLElement;
+    expect(header).not.toBeNull();
+    expect(header.className).toContain("sticky");
+    expect(header.className).toContain("top-0");
+    expect(header.className).toContain("bg-paper");
+    expect(header.className).toContain("border-b-[1.5px]");
+    expect(header.className).toContain("border-line-strong");
+    expect(header.className).not.toContain("backdrop");
+    expect(header.textContent).not.toContain("⚔");
+
+    const logo = within(header).getByRole("link", {
+      name: ko.common.appName,
+    });
+    expect(logo.className).toContain("font-pixel");
+    expect(logo.className).toContain("text-[16px]");
+
+    const views = view.getByRole("navigation", { name: ko.tabs.viewToggle });
+    const board = within(views).getByRole("link", { name: ko.tabs.board });
+    const ledger = within(views).getByRole("link", { name: ko.tabs.ledger });
+    const settings = within(views).getByRole("link", {
+      name: ko.tabs.settings,
+    });
+
+    expect(board).toHaveAttribute("aria-current", "page");
+    expect(board.className).toContain("border-[1.5px]");
+    expect(board.className).toContain("border-line-strong");
+    expect(board.className).toContain("bg-ground");
+    expect(ledger.className).not.toContain("border-");
+    expect(ledger.className).toContain("hover:bg-sunken");
+    expect(settings.className).not.toContain("border-");
+
+    const icons: Array<[HTMLElement, string]> = [
+      [board, "board"],
+      [ledger, "ledger"],
+      [settings, "settings"],
+    ];
+    for (const [link, iconName] of icons) {
+      const image = link.querySelector("img");
+      expect(image?.getAttribute("src")).toBe(
+        `/assets/icons/jrpg-v1/32/${iconName}.png`,
+      );
+      expect(image).toHaveAttribute("width", "32");
+    }
+
+    expect(within(board).getByText(ko.tabs.board)).toBeInTheDocument();
+    expect(within(ledger).getByText(ko.tabs.ledger)).toBeInTheDocument();
+    expect(within(settings).getByText(ko.tabs.settings)).toBeInTheDocument();
+
+    const create = view.getByRole("button", { name: ko.tabs.createGuild });
+    expect(create.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/add.png",
+    );
+  });
+
+  it("renders the theme menu and a ghost logout with the logout icon", async () => {
+    const view = renderApp("/g/1", { me: HERO });
+    await view.findByRole("link", { name: "달빛 길드" });
+
+    expect(view.getByRole("button", { name: ko.theme.label })).toHaveAttribute(
+      "aria-haspopup",
+      "menu",
+    );
+
+    const logoutButton = view.getByRole("button", {
+      name: ko.tabs.logout,
+    });
+    expect(logoutButton.className).toContain("hover:bg-sunken");
+    expect(logoutButton.className).not.toContain("border-line-strong");
+    expect(logoutButton.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/logout.png",
+    );
+  });
+
+  it("renders the project-load error and retry as separate flex items", async () => {
+    const view = renderApp("/g/1", {
+      me: HERO,
+      handlers: {
+        "GET /api/projects": () => ({
+          status: 500,
+          body: {
+            error: { code: "unexpected_error", message: "projects down" },
+          },
+        }),
+      },
+    });
+
+    const projectList = await view.findByRole("navigation", {
+      name: ko.tabs.projectList,
+    });
+    const message = await within(projectList).findByText(
+      ko.errors.loadFailed,
+    );
+    const group = message.parentElement as HTMLElement;
+
+    expect(group.className).toContain("flex");
+    expect(group.className).toContain("gap-2");
+    expect(group.textContent).not.toContain("·");
+
+    const retry = within(group).getByRole("button", {
+      name: ko.common.retry,
+    });
+    expect(group).toContainElement(retry);
+
+    await view.user.click(retry);
+    await waitFor(() => {
+      const projectReads = view.fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url) === "/api/projects" &&
+          (init?.method ?? "GET") === "GET",
+      );
+      expect(projectReads.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("ignores the Enter that confirms an IME candidate in the create dialog", async () => {
+    const view = renderApp("/g/1", { me: HERO });
+    await view.user.click(
+      await view.findByRole("button", { name: ko.tabs.createGuild }),
+    );
+
+    const dialog = view.getByRole("dialog", {
+      name: ko.tabs.createGuildTitle,
+    });
+    const input = within(dialog).getByLabelText(ko.tabs.guildName);
+    fireEvent.change(input, { target: { value: "새 길드" } });
+
+    const composingEnter = fireEvent.keyDown(input, {
+      key: "Enter",
+      isComposing: true,
+    });
+    expect(composingEnter).toBe(false);
+    expect(
+      view.fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url) === "/api/projects" && init?.method === "POST",
+      ),
+    ).toBe(false);
+
+    const regularEnter = fireEvent.keyDown(input, { key: "Enter" });
+    expect(regularEnter).toBe(true);
   });
 
   it("switches guilds and persists gl:lastProject", async () => {
@@ -425,13 +687,24 @@ describe("TabBar", () => {
     const dialog = view.getByRole("dialog", {
       name: ko.tabs.createGuildTitle,
     });
+    expect(dialog.className).toContain("bg-paper");
+    expect(dialog.className).toContain("border-[1.5px]");
+    expect(dialog.className).toContain("border-line-strong");
+    expect(dialog.className).toContain("shadow-hard");
+    expect(dialog.className).toContain("rounded-sm");
+
+    const submit = within(dialog).getByRole("button", {
+      name: ko.common.create,
+    });
+    expect(submit).toHaveAttribute("type", "submit");
+    expect(submit.className).toContain("bg-ink");
+    expect(submit.className).toContain("text-paper");
+
     await user.type(
       within(dialog).getByLabelText(ko.tabs.guildName),
       "새로운 길드",
     );
-    await user.click(
-      within(dialog).getByRole("button", { name: ko.common.create }),
-    );
+    await user.click(submit);
 
     await expectPath(view, "/g/3");
 
