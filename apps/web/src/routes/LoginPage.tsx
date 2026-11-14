@@ -1,19 +1,157 @@
 /**
- * Login screen placeholder.
+ * Login screen.
  *
- * T07/T08 replace this file with the real form; the router already mounts it
- * at `/login`.
+ * `POST /api/auth/login` starts the cookie session. On success the adventurer
+ * returns to the guild they last visited (`gl:lastProject`) or to `/`, which
+ * redirects to their first guild. Invalid credentials get the Korean
+ * `ko.login.invalidCredentials` copy instead of the server's English message.
  */
+import type { LoginRequest, MeResponse } from "@guildloom/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+
+import { login } from "../api/auth";
+import { ApiClientError } from "../api/client";
+import { apiErrorMessage } from "../components/auth/apiErrorMessage";
+import AuthPanel from "../components/auth/AuthPanel";
+import FormAlert from "../components/auth/FormAlert";
+import FormField from "../components/auth/FormField";
+import {
+  hasErrors,
+  validateLoginId,
+  validatePassword,
+} from "../components/auth/validation";
+import { LAST_PROJECT_STORAGE_KEY } from "../components/AppLayout";
 import { ko } from "../i18n/ko";
+import { queryKeys } from "../lib/queryKeys";
+
+interface LoginValues {
+  loginId: string;
+  password: string;
+}
+
+type LoginFieldErrors = Partial<Record<keyof LoginValues, string>>;
+
+/** Project id remembered by {@link AppLayout}, if any. */
+function readLastProjectId(): number | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_PROJECT_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function LoginPage() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [values, setValues] = useState<LoginValues>({
+    loginId: "",
+    password: "",
+  });
+  const [errors, setErrors] = useState<LoginFieldErrors>({});
+
+  const loginMutation = useMutation({
+    mutationFn: (body: LoginRequest) => login(body),
+    onSuccess: (data) => {
+      // Cache the fresh session so the gate leaves /login immediately, even
+      // before the invalidation refetch below lands.
+      queryClient.setQueryData<MeResponse>(queryKeys.me, { user: data.user });
+      const lastProjectId = readLastProjectId();
+      navigate(lastProjectId === null ? "/" : `/g/${lastProjectId}`, {
+        replace: true,
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.projects });
+    },
+  });
+
+  const updateField = (field: keyof LoginValues) => (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const value = event.currentTarget.value;
+    setValues((previous) => ({ ...previous, [field]: value }));
+    setErrors((previous) => ({ ...previous, [field]: undefined }));
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loginMutation.isPending) {
+      return;
+    }
+
+    const loginId = values.loginId.trim();
+    const nextErrors: LoginFieldErrors = {
+      loginId: validateLoginId(loginId) ?? undefined,
+      password: validatePassword(values.password) ?? undefined,
+    };
+
+    setErrors(nextErrors);
+    if (hasErrors(nextErrors)) {
+      return;
+    }
+
+    loginMutation.mutate({ loginId, password: values.password });
+  };
+
+  const serverError = loginMutation.isError
+    ? loginMutation.error instanceof ApiClientError &&
+      loginMutation.error.status === 401
+      ? ko.login.invalidCredentials
+      : apiErrorMessage(loginMutation.error, ko.login.failed)
+    : null;
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
-      <section className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-xl">
-        <h1 className="text-2xl font-black tracking-tight">{ko.login.title}</h1>
-        <p className="mt-2 text-sm text-slate-400">{ko.login.description}</p>
-        <p className="mt-6 text-xs text-slate-500">{ko.common.comingSoon}</p>
-      </section>
-    </main>
+    <AuthPanel
+      title={ko.login.title}
+      heading={ko.login.heading}
+      description={ko.login.description}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <FormField
+          id="login-id"
+          label={ko.login.loginId}
+          value={values.loginId}
+          onChange={updateField("loginId")}
+          placeholder={ko.login.loginIdPlaceholder}
+          maxLength={32}
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          autoFocus
+          required
+          error={errors.loginId}
+        />
+
+        <FormField
+          id="login-password"
+          label={ko.login.password}
+          type="password"
+          value={values.password}
+          onChange={updateField("password")}
+          placeholder={ko.login.passwordPlaceholder}
+          autoComplete="current-password"
+          required
+          error={errors.password}
+        />
+
+        <FormAlert message={serverError} />
+
+        <button
+          type="submit"
+          disabled={loginMutation.isPending}
+          className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loginMutation.isPending ? ko.login.submitting : ko.login.submit}
+        </button>
+      </form>
+    </AuthPanel>
   );
 }
