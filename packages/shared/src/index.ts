@@ -1,7 +1,11 @@
 /**
  * `@guildloom/shared`
  *
- * Placeholder module. The shared Zod schemas, constants, event rendering
- * helpers and other pure functions replace this in the next task.
+ * Constants, level helpers, HTTP API Zod contracts, event rendering and
+ * sprite manifest types shared by the guildloom server, web client and agents.
  */
-export const SHARED_PACKAGE_NAME = "@guildloom/shared" as const;
+export * from "./api.js";
+export * from "./constants.js";
+export * from "./events.js";
+export * from "./level.js";
+export * from "./sprites.js";
