@@ -10,7 +10,7 @@
  * As in the other DOM tests, jsdom is installed manually because Vitest cannot
  * resolve the workspace-local copy from the hoisted runner.
  */
-import type { Quest } from "@guildloom/shared";
+import type { Quest, QuestEvent } from "@guildloom/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface JsdomModule {
@@ -135,14 +135,22 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+interface StubFetchOptions {
+  /** Events served once the adventure log has already been fetched once. */
+  eventsAfterFirst?: QuestEvent[];
+}
+
 /**
  * Stub `fetch` for the drawer's three GETs and a controllable PATCH endpoint.
  * Each PATCH body is recorded and answered only when the test resolves the
- * matching deferred, so "in flight" really means in flight.
+ * matching deferred, so "in flight" really means in flight. Adventure-log GETs
+ * are counted and the first one always returns an empty history, so a test can
+ * prove that a tag edit triggers a refresh which then shows the new event.
  */
-function stubFetch() {
+function stubFetch({ eventsAfterFirst = [] }: StubFetchOptions = {}) {
   const patchBodies: Record<string, unknown>[] = [];
   const pendingPatches: Deferred<MockReply>[] = [];
+  let eventsRequestCount = 0;
 
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -153,7 +161,8 @@ function stubFetch() {
         return jsonResponse(QUEST_DETAIL);
       }
       if (method === "GET" && url.pathname === "/api/quests/1/events") {
-        return jsonResponse([]);
+        eventsRequestCount += 1;
+        return jsonResponse(eventsRequestCount === 1 ? [] : eventsAfterFirst);
       }
       if (method === "GET" && url.pathname === "/api/projects/1/tags") {
         return jsonResponse([]);
@@ -176,7 +185,13 @@ function stubFetch() {
   );
 
   vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, patchBodies, pendingPatches };
+  return {
+    fetchMock,
+    patchBodies,
+    pendingPatches,
+    /** How many `GET /api/quests/1/events` requests have been made. */
+    getEventsRequestCount: () => eventsRequestCount,
+  };
 }
 
 function renderDrawer() {
@@ -237,6 +252,48 @@ describe("QuestDrawer tags", () => {
     expect(pendingPatches).toHaveLength(2);
     expect(screen.getByText("인게임")).toBeInTheDocument();
     expect(screen.getByText("v1.0")).toBeInTheDocument();
+  });
+
+  it("refreshes the adventure log once the tag PATCH settles", async () => {
+    const tagEvent: QuestEvent = {
+      id: 1,
+      questId: 1,
+      projectId: 1,
+      type: "quest_edited",
+      payload: { fields: ["tags"] },
+      actor: { id: 1, displayName: "김모험" },
+      familiarId: null,
+      createdAt: Date.UTC(2026, 0, 5, 3, 0, 0),
+    };
+    const { getEventsRequestCount, pendingPatches } = stubFetch({
+      eventsAfterFirst: [tagEvent],
+    });
+    const { user } = renderDrawer();
+
+    await screen.findByDisplayValue("Alpha");
+    await screen.findByText(ko.board.drawer.emptyHistory);
+    await waitFor(() => expect(getEventsRequestCount()).toBe(1));
+
+    const tagInput = screen.getByRole("textbox", { name: ko.quest.tagAdd });
+
+    await user.type(tagInput, "인게임");
+    await user.keyboard("{Enter}");
+    await screen.findByText("인게임");
+
+    await waitFor(() => expect(pendingPatches).toHaveLength(1));
+    expect(getEventsRequestCount()).toBe(1);
+
+    pendingPatches[0]!.resolve({
+      body: { ...QUEST_DETAIL, tags: ["인게임"] },
+    });
+
+    // The mounted adventure log refetches as soon as the PATCH settles …
+    await waitFor(() => expect(getEventsRequestCount()).toBe(2));
+    // … and renders the new `quest_edited` sentence from that response.
+    expect(
+      await screen.findByText(/의뢰 내용을 고쳤습니다 \(태그\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("인게임")).toBeInTheDocument();
   });
 
   it("rolls the chip back when the tag PATCH fails", async () => {
