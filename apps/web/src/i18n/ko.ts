@@ -165,10 +165,10 @@ export const ko = {
   board: {
     title: "게시판",
     columns: {
-      board: "📋 게시판",
-      dungeon: "⚔️ 던전 진행",
-      boss: "👑 보스전",
-      cleared: "🏆 클리어",
+      board: "게시판",
+      dungeon: "던전 진행",
+      boss: "보스전",
+      cleared: "클리어",
     },
     loading: "의뢰를 불러오는 중…",
     loadFailed: "의뢰를 불러오지 못했습니다.",

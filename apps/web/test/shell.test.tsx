@@ -650,10 +650,10 @@ describe("queryKeys", () => {
 describe("ko copy", () => {
   it("contains the exact board column labels", () => {
     expect(ko.board.columns).toEqual({
-      board: "📋 게시판",
-      dungeon: "⚔️ 던전 진행",
-      boss: "👑 보스전",
-      cleared: "🏆 클리어",
+      board: "게시판",
+      dungeon: "던전 진행",
+      boss: "보스전",
+      cleared: "클리어",
     });
   });
 

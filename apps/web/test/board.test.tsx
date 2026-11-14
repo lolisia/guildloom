@@ -296,8 +296,11 @@ describe("BoardPage", () => {
     const { container } = renderBoard();
 
     for (const label of Object.values(ko.board.columns)) {
+      // Plain labels now collide with the sr-only page title ("게시판"), so
+      // scope the heading lookup to the column region itself.
+      const column = await screen.findByRole("region", { name: label });
       expect(
-        await screen.findByRole("heading", { name: label }),
+        within(column).getByRole("heading", { name: label }),
       ).toBeInTheDocument();
     }
 
