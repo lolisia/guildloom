@@ -1,0 +1,1317 @@
+{
+  "name": "guildloom-jrpg-icons",
+  "version": 1,
+  "size": 32,
+  "scale2x": 64,
+  "baseUrl": "/assets/icons/jrpg-v1/",
+  "palette": [
+    "#191923",
+    "#302632",
+    "#49404b",
+    "#6a6069",
+    "#97919a",
+    "#d1c4b1",
+    "#fff0ce",
+    "#e7cca0",
+    "#ba996f",
+    "#806046",
+    "#553e32",
+    "#482d2b",
+    "#793d35",
+    "#a65343",
+    "#c57a5a",
+    "#e69b72",
+    "#654365",
+    "#90638d",
+    "#bd8fb0",
+    "#183c40",
+    "#20585b",
+    "#287b79",
+    "#3b9d91",
+    "#75b5a1",
+    "#35516b",
+    "#56768e",
+    "#8fa8bd",
+    "#614a28",
+    "#99702d",
+    "#ce9c3c",
+    "#efc45e",
+    "#ffe193"
+  ],
+  "sprite": {
+    "src": "sprite.png",
+    "src2x": "sprite@2x.png",
+    "columns": 16,
+    "rows": 6,
+    "width": 512,
+    "height": 192
+  },
+  "categories": [
+    {
+      "id": "core",
+      "label": "길드·퀘스트"
+    },
+    {
+      "id": "workflow",
+      "label": "공략·소문"
+    },
+    {
+      "id": "actions",
+      "label": "편집·조작"
+    },
+    {
+      "id": "systems",
+      "label": "계정·메시지·첨부"
+    },
+    {
+      "id": "ranks",
+      "label": "등급·판정"
+    },
+    {
+      "id": "navigation",
+      "label": "탐색·보조"
+    }
+  ],
+  "icons": {
+    "guild": {
+      "label": "길드",
+      "category": "core",
+      "src": "32/guild.png",
+      "src2x": "64/guild.png",
+      "sprite": {
+        "x": 0,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "quest": {
+      "label": "퀘스트",
+      "category": "core",
+      "src": "32/quest.png",
+      "src2x": "64/quest.png",
+      "sprite": {
+        "x": 32,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "party": {
+      "label": "파티",
+      "category": "core",
+      "src": "32/party.png",
+      "src2x": "64/party.png",
+      "sprite": {
+        "x": 64,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "adventurer": {
+      "label": "모험가",
+      "category": "core",
+      "src": "32/adventurer.png",
+      "src2x": "64/adventurer.png",
+      "sprite": {
+        "x": 96,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "familiar": {
+      "label": "소환수",
+      "category": "core",
+      "src": "32/familiar.png",
+      "src2x": "64/familiar.png",
+      "sprite": {
+        "x": 128,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "board": {
+      "label": "게시판",
+      "category": "core",
+      "src": "32/board.png",
+      "src2x": "64/board.png",
+      "sprite": {
+        "x": 160,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "dungeon": {
+      "label": "던전 진행",
+      "category": "core",
+      "src": "32/dungeon.png",
+      "src2x": "64/dungeon.png",
+      "sprite": {
+        "x": 192,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "boss": {
+      "label": "보스전",
+      "category": "core",
+      "src": "32/boss.png",
+      "src2x": "64/boss.png",
+      "sprite": {
+        "x": 224,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "cleared": {
+      "label": "클리어",
+      "category": "core",
+      "src": "32/cleared.png",
+      "src2x": "64/cleared.png",
+      "sprite": {
+        "x": 256,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "ledger": {
+      "label": "원장",
+      "category": "core",
+      "src": "32/ledger.png",
+      "src2x": "64/ledger.png",
+      "sprite": {
+        "x": 288,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "settings": {
+      "label": "설정",
+      "category": "core",
+      "src": "32/settings.png",
+      "src2x": "64/settings.png",
+      "sprite": {
+        "x": 320,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "invite": {
+      "label": "초대",
+      "category": "core",
+      "src": "32/invite.png",
+      "src2x": "64/invite.png",
+      "sprite": {
+        "x": 352,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "xp": {
+      "label": "경험치",
+      "category": "core",
+      "src": "32/xp.png",
+      "src2x": "64/xp.png",
+      "sprite": {
+        "x": 384,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "level-up": {
+      "label": "레벨 업",
+      "category": "core",
+      "src": "32/level-up.png",
+      "src2x": "64/level-up.png",
+      "sprite": {
+        "x": 416,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "bounty": {
+      "label": "현상금",
+      "category": "core",
+      "src": "32/bounty.png",
+      "src2x": "64/bounty.png",
+      "sprite": {
+        "x": 448,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "guardian": {
+      "label": "지역 수호자",
+      "category": "core",
+      "src": "32/guardian.png",
+      "src2x": "64/guardian.png",
+      "sprite": {
+        "x": 480,
+        "y": 0,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rumor": {
+      "label": "소문",
+      "category": "workflow",
+      "src": "32/rumor.png",
+      "src2x": "64/rumor.png",
+      "sprite": {
+        "x": 0,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "archive": {
+      "label": "아카이브",
+      "category": "workflow",
+      "src": "32/archive.png",
+      "src2x": "64/archive.png",
+      "sprite": {
+        "x": 32,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "joined": {
+      "label": "합류·대기",
+      "category": "workflow",
+      "src": "32/joined.png",
+      "src2x": "64/joined.png",
+      "sprite": {
+        "x": 64,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "fighting": {
+      "label": "전투 중",
+      "category": "workflow",
+      "src": "32/fighting.png",
+      "src2x": "64/fighting.png",
+      "sprite": {
+        "x": 96,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "done": {
+      "label": "전투 완료",
+      "category": "workflow",
+      "src": "32/done.png",
+      "src2x": "64/done.png",
+      "sprite": {
+        "x": 128,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "retreated": {
+      "label": "후퇴",
+      "category": "workflow",
+      "src": "32/retreated.png",
+      "src2x": "64/retreated.png",
+      "sprite": {
+        "x": 160,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "nominate": {
+      "label": "지목",
+      "category": "workflow",
+      "src": "32/nominate.png",
+      "src2x": "64/nominate.png",
+      "sprite": {
+        "x": 192,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "accept": {
+      "label": "수락",
+      "category": "workflow",
+      "src": "32/accept.png",
+      "src2x": "64/accept.png",
+      "sprite": {
+        "x": 224,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "pass": {
+      "label": "패스",
+      "category": "workflow",
+      "src": "32/pass.png",
+      "src2x": "64/pass.png",
+      "sprite": {
+        "x": 256,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "relay": {
+      "label": "토스",
+      "category": "workflow",
+      "src": "32/relay.png",
+      "src2x": "64/relay.png",
+      "sprite": {
+        "x": 288,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "reinforce": {
+      "label": "증원",
+      "category": "workflow",
+      "src": "32/reinforce.png",
+      "src2x": "64/reinforce.png",
+      "sprite": {
+        "x": 320,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "witness": {
+      "label": "나도 봤다",
+      "category": "workflow",
+      "src": "32/witness.png",
+      "src2x": "64/witness.png",
+      "sprite": {
+        "x": 352,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "investigate": {
+      "label": "조사",
+      "category": "workflow",
+      "src": "32/investigate.png",
+      "src2x": "64/investigate.png",
+      "sprite": {
+        "x": 384,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "recheck": {
+      "label": "재확인",
+      "category": "workflow",
+      "src": "32/recheck.png",
+      "src2x": "64/recheck.png",
+      "sprite": {
+        "x": 416,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "milestone": {
+      "label": "이정표",
+      "category": "workflow",
+      "src": "32/milestone.png",
+      "src2x": "64/milestone.png",
+      "sprite": {
+        "x": 448,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "scout": {
+      "label": "정찰",
+      "category": "workflow",
+      "src": "32/scout.png",
+      "src2x": "64/scout.png",
+      "sprite": {
+        "x": 480,
+        "y": 32,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "add": {
+      "label": "추가",
+      "category": "actions",
+      "src": "32/add.png",
+      "src2x": "64/add.png",
+      "sprite": {
+        "x": 0,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "remove": {
+      "label": "제거",
+      "category": "actions",
+      "src": "32/remove.png",
+      "src2x": "64/remove.png",
+      "sprite": {
+        "x": 32,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "close": {
+      "label": "닫기",
+      "category": "actions",
+      "src": "32/close.png",
+      "src2x": "64/close.png",
+      "sprite": {
+        "x": 64,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "edit": {
+      "label": "수정",
+      "category": "actions",
+      "src": "32/edit.png",
+      "src2x": "64/edit.png",
+      "sprite": {
+        "x": 96,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "save": {
+      "label": "저장",
+      "category": "actions",
+      "src": "32/save.png",
+      "src2x": "64/save.png",
+      "sprite": {
+        "x": 128,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "delete": {
+      "label": "삭제",
+      "category": "actions",
+      "src": "32/delete.png",
+      "src2x": "64/delete.png",
+      "sprite": {
+        "x": 160,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "search": {
+      "label": "검색",
+      "category": "actions",
+      "src": "32/search.png",
+      "src2x": "64/search.png",
+      "sprite": {
+        "x": 192,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "filter": {
+      "label": "필터",
+      "category": "actions",
+      "src": "32/filter.png",
+      "src2x": "64/filter.png",
+      "sprite": {
+        "x": 224,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "sort-ascending": {
+      "label": "오름차순",
+      "category": "actions",
+      "src": "32/sort-ascending.png",
+      "src2x": "64/sort-ascending.png",
+      "sprite": {
+        "x": 256,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "sort-descending": {
+      "label": "내림차순",
+      "category": "actions",
+      "src": "32/sort-descending.png",
+      "src2x": "64/sort-descending.png",
+      "sprite": {
+        "x": 288,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "copy": {
+      "label": "복사",
+      "category": "actions",
+      "src": "32/copy.png",
+      "src2x": "64/copy.png",
+      "sprite": {
+        "x": 320,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "download": {
+      "label": "내보내기",
+      "category": "actions",
+      "src": "32/download.png",
+      "src2x": "64/download.png",
+      "sprite": {
+        "x": 352,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "upload": {
+      "label": "업로드",
+      "category": "actions",
+      "src": "32/upload.png",
+      "src2x": "64/upload.png",
+      "sprite": {
+        "x": 384,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "refresh": {
+      "label": "다시 시도",
+      "category": "actions",
+      "src": "32/refresh.png",
+      "src2x": "64/refresh.png",
+      "sprite": {
+        "x": 416,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "link": {
+      "label": "링크·병합",
+      "category": "actions",
+      "src": "32/link.png",
+      "src2x": "64/link.png",
+      "sprite": {
+        "x": 448,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "external-link": {
+      "label": "외부 링크",
+      "category": "actions",
+      "src": "32/external-link.png",
+      "src2x": "64/external-link.png",
+      "sprite": {
+        "x": 480,
+        "y": 64,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "login": {
+      "label": "로그인·입장",
+      "category": "systems",
+      "src": "32/login.png",
+      "src2x": "64/login.png",
+      "sprite": {
+        "x": 0,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "logout": {
+      "label": "로그아웃·떠나기",
+      "category": "systems",
+      "src": "32/logout.png",
+      "src2x": "64/logout.png",
+      "sprite": {
+        "x": 32,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "lock": {
+      "label": "잠금",
+      "category": "systems",
+      "src": "32/lock.png",
+      "src2x": "64/lock.png",
+      "sprite": {
+        "x": 64,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "key": {
+      "label": "토큰·키",
+      "category": "systems",
+      "src": "32/key.png",
+      "src2x": "64/key.png",
+      "sprite": {
+        "x": 96,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "notification": {
+      "label": "알림",
+      "category": "systems",
+      "src": "32/notification.png",
+      "src2x": "64/notification.png",
+      "sprite": {
+        "x": 128,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "chat": {
+      "label": "주점·파티 채팅",
+      "category": "systems",
+      "src": "32/chat.png",
+      "src2x": "64/chat.png",
+      "sprite": {
+        "x": 160,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "mention": {
+      "label": "멘션",
+      "category": "systems",
+      "src": "32/mention.png",
+      "src2x": "64/mention.png",
+      "sprite": {
+        "x": 192,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "attachment": {
+      "label": "첨부",
+      "category": "systems",
+      "src": "32/attachment.png",
+      "src2x": "64/attachment.png",
+      "sprite": {
+        "x": 224,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "image": {
+      "label": "이미지",
+      "category": "systems",
+      "src": "32/image.png",
+      "src2x": "64/image.png",
+      "sprite": {
+        "x": 256,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "video": {
+      "label": "동영상",
+      "category": "systems",
+      "src": "32/video.png",
+      "src2x": "64/video.png",
+      "sprite": {
+        "x": 288,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "screen-record": {
+      "label": "화면 녹화",
+      "category": "systems",
+      "src": "32/screen-record.png",
+      "src2x": "64/screen-record.png",
+      "sprite": {
+        "x": 320,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "floor": {
+      "label": "층·서브태스크",
+      "category": "systems",
+      "src": "32/floor.png",
+      "src2x": "64/floor.png",
+      "sprite": {
+        "x": 352,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "realm": {
+      "label": "환경·지역",
+      "category": "systems",
+      "src": "32/realm.png",
+      "src2x": "64/realm.png",
+      "sprite": {
+        "x": 384,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "help": {
+      "label": "도움말",
+      "category": "systems",
+      "src": "32/help.png",
+      "src2x": "64/help.png",
+      "sprite": {
+        "x": 416,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "warning": {
+      "label": "주의·오류",
+      "category": "systems",
+      "src": "32/warning.png",
+      "src2x": "64/warning.png",
+      "sprite": {
+        "x": 448,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "info": {
+      "label": "정보",
+      "category": "systems",
+      "src": "32/info.png",
+      "src2x": "64/info.png",
+      "sprite": {
+        "x": 480,
+        "y": 96,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-f": {
+      "label": "F 등급",
+      "category": "ranks",
+      "src": "32/rank-f.png",
+      "src2x": "64/rank-f.png",
+      "sprite": {
+        "x": 0,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-e": {
+      "label": "E 등급",
+      "category": "ranks",
+      "src": "32/rank-e.png",
+      "src2x": "64/rank-e.png",
+      "sprite": {
+        "x": 32,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-d": {
+      "label": "D 등급",
+      "category": "ranks",
+      "src": "32/rank-d.png",
+      "src2x": "64/rank-d.png",
+      "sprite": {
+        "x": 64,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-c": {
+      "label": "C 등급",
+      "category": "ranks",
+      "src": "32/rank-c.png",
+      "src2x": "64/rank-c.png",
+      "sprite": {
+        "x": 96,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-b": {
+      "label": "B 등급",
+      "category": "ranks",
+      "src": "32/rank-b.png",
+      "src2x": "64/rank-b.png",
+      "sprite": {
+        "x": 128,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-a": {
+      "label": "A 등급",
+      "category": "ranks",
+      "src": "32/rank-a.png",
+      "src2x": "64/rank-a.png",
+      "sprite": {
+        "x": 160,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-s": {
+      "label": "S 등급",
+      "category": "ranks",
+      "src": "32/rank-s.png",
+      "src2x": "64/rank-s.png",
+      "sprite": {
+        "x": 192,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "rank-none": {
+      "label": "등급 없음",
+      "category": "ranks",
+      "src": "32/rank-none.png",
+      "src2x": "64/rank-none.png",
+      "sprite": {
+        "x": 224,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "intended": {
+      "label": "의도된 연출",
+      "category": "ranks",
+      "src": "32/intended.png",
+      "src2x": "64/intended.png",
+      "sprite": {
+        "x": 256,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "mirage": {
+      "label": "신기루",
+      "category": "ranks",
+      "src": "32/mirage.png",
+      "src2x": "64/mirage.png",
+      "sprite": {
+        "x": 288,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "merged": {
+      "label": "병합됨",
+      "category": "ranks",
+      "src": "32/merged.png",
+      "src2x": "64/merged.png",
+      "sprite": {
+        "x": 320,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "vanished": {
+      "label": "사라짐",
+      "category": "ranks",
+      "src": "32/vanished.png",
+      "src2x": "64/vanished.png",
+      "sprite": {
+        "x": 352,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "faded": {
+      "label": "잠잠해짐",
+      "category": "ranks",
+      "src": "32/faded.png",
+      "src2x": "64/faded.png",
+      "sprite": {
+        "x": 384,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "dropped": {
+      "label": "의뢰 취소",
+      "category": "ranks",
+      "src": "32/dropped.png",
+      "src2x": "64/dropped.png",
+      "sprite": {
+        "x": 416,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "pending": {
+      "label": "대기 중",
+      "category": "ranks",
+      "src": "32/pending.png",
+      "src2x": "64/pending.png",
+      "sprite": {
+        "x": 448,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "success": {
+      "label": "성공",
+      "category": "ranks",
+      "src": "32/success.png",
+      "src2x": "64/success.png",
+      "sprite": {
+        "x": 480,
+        "y": 128,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "home": {
+      "label": "홈",
+      "category": "navigation",
+      "src": "32/home.png",
+      "src2x": "64/home.png",
+      "sprite": {
+        "x": 0,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "arrow-left": {
+      "label": "왼쪽·뒤로",
+      "category": "navigation",
+      "src": "32/arrow-left.png",
+      "src2x": "64/arrow-left.png",
+      "sprite": {
+        "x": 32,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "arrow-right": {
+      "label": "오른쪽·다음",
+      "category": "navigation",
+      "src": "32/arrow-right.png",
+      "src2x": "64/arrow-right.png",
+      "sprite": {
+        "x": 64,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "arrow-up": {
+      "label": "위로",
+      "category": "navigation",
+      "src": "32/arrow-up.png",
+      "src2x": "64/arrow-up.png",
+      "sprite": {
+        "x": 96,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "arrow-down": {
+      "label": "아래로",
+      "category": "navigation",
+      "src": "32/arrow-down.png",
+      "src2x": "64/arrow-down.png",
+      "sprite": {
+        "x": 128,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "chevron-left": {
+      "label": "이전",
+      "category": "navigation",
+      "src": "32/chevron-left.png",
+      "src2x": "64/chevron-left.png",
+      "sprite": {
+        "x": 160,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "chevron-right": {
+      "label": "다음",
+      "category": "navigation",
+      "src": "32/chevron-right.png",
+      "src2x": "64/chevron-right.png",
+      "sprite": {
+        "x": 192,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "chevron-up": {
+      "label": "접기",
+      "category": "navigation",
+      "src": "32/chevron-up.png",
+      "src2x": "64/chevron-up.png",
+      "sprite": {
+        "x": 224,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "chevron-down": {
+      "label": "펼치기",
+      "category": "navigation",
+      "src": "32/chevron-down.png",
+      "src2x": "64/chevron-down.png",
+      "sprite": {
+        "x": 256,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "expand": {
+      "label": "확대",
+      "category": "navigation",
+      "src": "32/expand.png",
+      "src2x": "64/expand.png",
+      "sprite": {
+        "x": 288,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "collapse": {
+      "label": "축소",
+      "category": "navigation",
+      "src": "32/collapse.png",
+      "src2x": "64/collapse.png",
+      "sprite": {
+        "x": 320,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "more": {
+      "label": "더 보기",
+      "category": "navigation",
+      "src": "32/more.png",
+      "src2x": "64/more.png",
+      "sprite": {
+        "x": 352,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "drag": {
+      "label": "드래그",
+      "category": "navigation",
+      "src": "32/drag.png",
+      "src2x": "64/drag.png",
+      "sprite": {
+        "x": 384,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "calendar": {
+      "label": "날짜",
+      "category": "navigation",
+      "src": "32/calendar.png",
+      "src2x": "64/calendar.png",
+      "sprite": {
+        "x": 416,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "clock": {
+      "label": "시간",
+      "category": "navigation",
+      "src": "32/clock.png",
+      "src2x": "64/clock.png",
+      "sprite": {
+        "x": 448,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    },
+    "empty": {
+      "label": "비어 있음",
+      "category": "navigation",
+      "src": "32/empty.png",
+      "src2x": "64/empty.png",
+      "sprite": {
+        "x": 480,
+        "y": 160,
+        "width": 32,
+        "height": 32
+      }
+    }
+  },
+  "mappings": {
+    "stages": {
+      "rumor": "rumor",
+      "board": "board",
+      "dungeon": "dungeon",
+      "boss": "boss",
+      "cleared": "cleared",
+      "archived": "archive"
+    },
+    "ranks": {
+      "F": "rank-f",
+      "E": "rank-e",
+      "D": "rank-d",
+      "C": "rank-c",
+      "B": "rank-b",
+      "A": "rank-a",
+      "S": "rank-s"
+    },
+    "rankFallback": "rank-none",
+    "partyStatus": {
+      "joined": "joined",
+      "fighting": "fighting",
+      "done": "done",
+      "retreated": "retreated"
+    },
+    "nominations": {
+      "pending": "nominate",
+      "accepted": "accept",
+      "passed": "pass"
+    },
+    "archiveReasons": {
+      "intended": "intended",
+      "mirage": "mirage",
+      "merged": "merged",
+      "faded": "faded",
+      "vanished": "vanished",
+      "dropped": "dropped"
+    },
+    "events": {
+      "quest_posted": "quest",
+      "quest_edited": "edit",
+      "quest_moved": "arrow-right",
+      "quest_archived": "archive"
+    },
+    "realms": {
+      "production": "realm",
+      "development": "realm",
+      "local": "realm"
+    }
+  },
+  "aliases": {
+    "cancel": "close",
+    "confirm": "accept",
+    "create": "add",
+    "loading": "pending",
+    "retry": "refresh",
+    "back": "arrow-left",
+    "tag": "nominate",
+    "tagRemove": "close",
+    "clearFilters": "remove",
+    "bulkPaste": "copy",
+    "exportCsv": "download",
+    "history": "clock",
+    "owner": "boss",
+    "member": "adventurer",
+    "active": "success",
+    "revoked": "dropped",
+    "password": "lock",
+    "loginId": "adventurer",
+    "signup": "add",
+    "joinGuild": "login",
+    "leaveGuild": "logout",
+    "createGuild": "add",
+    "createInvite": "invite",
+    "revokeInvite": "dropped",
+    "copyInvite": "copy",
+    "inviteCopied": "success",
+    "emptyColumn": "empty",
+    "noProjects": "guild",
+    "noTags": "empty",
+    "notFound": "warning",
+    "networkError": "warning",
+    "mentionUnread": "notification",
+    "reignite": "refresh",
+    "promoteRumor": "quest",
+    "recordMilestone": "milestone",
+    "dustyQuest": "faded"
+  }
+}
