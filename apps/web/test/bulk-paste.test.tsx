@@ -267,4 +267,34 @@ describe("quick add bulk paste", () => {
     ).not.toBeInTheDocument();
     expect(input).toHaveValue("메모");
   });
+
+  it("renders the bulk confirmation as a paper dialog with the hard shadow", async () => {
+    stubFetch(boardHandler());
+    const { user } = renderBoard();
+
+    await screen.findByText("기존 의뢰");
+    const input = screen.getByRole("textbox", { name: ko.board.newQuest });
+    pasteText(input, "알파\n베타");
+
+    const dialog = screen.getByRole("dialog", {
+      name: ko.board.bulk.title,
+    });
+    expect(dialog).toHaveClass(
+      "bg-paper",
+      "border-[1.5px]",
+      "border-line-strong",
+      "shadow-hard",
+      "rounded-sm",
+    );
+    expect(dialog.className).not.toContain("rounded-2xl");
+    expect(dialog.className).not.toContain("backdrop-blur");
+    expect(dialog.parentElement).toHaveClass("bg-ink/40");
+
+    await user.click(
+      within(dialog).getByRole("button", { name: ko.common.cancel }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: ko.board.bulk.title }),
+    ).not.toBeInTheDocument();
+  });
 });

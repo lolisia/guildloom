@@ -165,10 +165,10 @@ export const ko = {
   board: {
     title: "게시판",
     columns: {
-      board: "📋 게시판",
-      dungeon: "⚔️ 던전 진행",
-      boss: "👑 보스전",
-      cleared: "🏆 클리어",
+      board: "게시판",
+      dungeon: "던전 진행",
+      boss: "보스전",
+      cleared: "클리어",
     },
     loading: "의뢰를 불러오는 중…",
     loadFailed: "의뢰를 불러오지 못했습니다.",
@@ -334,6 +334,12 @@ export const ko = {
     leaveGuild: "길드 떠나기",
     leaveConfirm: "정말 길드를 떠날까요?",
     leaveFailed: "길드를 떠나지 못했습니다.",
+  },
+  theme: {
+    label: "테마",
+    system: "시스템",
+    light: "라이트",
+    dark: "다크",
   },
   errors: {
     generic: "문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",

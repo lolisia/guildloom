@@ -14,6 +14,8 @@ import { ko } from "../../i18n/ko";
 import { queryKeys } from "../../lib/queryKeys";
 import { apiErrorMessage } from "../auth/apiErrorMessage";
 import FormAlert from "../auth/FormAlert";
+import Icon from "../Icon";
+import { Button, Panel } from "../ui";
 import CopyInviteButton from "./CopyInviteButton";
 
 export interface InviteSectionProps {
@@ -66,26 +68,26 @@ export function InviteSection({ projectId }: InviteSectionProps) {
     : undefined;
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+    <Panel>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-slate-200">
+          <h2 className="text-sm font-semibold text-ink">
             {ko.settings.invites}
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             {ko.settings.invitesDescription}
           </p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          icon="invite"
           onClick={() => createMutation.mutate()}
           disabled={createMutation.isPending}
-          className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {createMutation.isPending
             ? ko.settings.creatingInvite
             : ko.settings.createInvite}
-        </button>
+        </Button>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -113,16 +115,16 @@ export function InviteSection({ projectId }: InviteSectionProps) {
         {created ? (
           <div
             data-testid="created-invite"
-            className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3"
+            className="rounded-sm border-[1.5px] border-teal bg-sunken px-4 py-3"
           >
-            <p className="text-xs font-medium text-emerald-300">
+            <p className="text-xs font-medium text-teal">
               {ko.settings.inviteUrl}
             </p>
-            <p className="mt-1 text-sm font-bold tracking-wide text-slate-100">
+            <p className="mt-1 font-pixel text-[16px] font-bold text-ink">
               {created.code}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <code className="break-all rounded bg-slate-950 px-2 py-1 text-xs text-slate-300">
+              <code className="break-all rounded-sm bg-paper px-2 py-1 text-xs text-ink">
                 {`${window.location.origin}${created.url}`}
               </code>
               <CopyInviteButton url={created.url} />
@@ -131,29 +133,29 @@ export function InviteSection({ projectId }: InviteSectionProps) {
         ) : null}
 
         {invitesQuery.isPending ? (
-          <p role="status" className="text-xs text-slate-400">
+          <p role="status" className="text-xs text-muted">
             {ko.common.loading}
           </p>
         ) : null}
 
         {invitesQuery.isError ? (
           <div className="flex flex-wrap items-center gap-3">
-            <p role="alert" className="text-xs text-rose-300">
+            <p role="alert" className="text-xs text-brick">
               {ko.settings.invitesLoadFailed}
             </p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              icon="refresh"
               onClick={() => void invitesQuery.refetch()}
-              className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700"
             >
               {ko.common.retry}
-            </button>
+            </Button>
           </div>
         ) : null}
 
         {!invitesQuery.isPending && !invitesQuery.isError ? (
           invites.length === 0 ? (
-            <p className="text-xs text-slate-500">{ko.settings.inviteEmpty}</p>
+            <p className="text-xs text-muted">{ko.settings.inviteEmpty}</p>
           ) : (
             <ul className="space-y-2">
               {invites.map((invite) => {
@@ -161,34 +163,35 @@ export function InviteSection({ projectId }: InviteSectionProps) {
                 return (
                   <li
                     key={invite.id}
-                    className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2"
+                    className="rounded-sm border border-line bg-paper px-3 py-2"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <code className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-emerald-300">
+                      <Icon name="invite" size={32} />
+                      <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-xs text-ink">
                         {invite.code}
                       </code>
                       <span
                         data-status={active ? "active" : "revoked"}
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                          active
-                            ? "bg-emerald-500/15 text-emerald-300"
-                            : "bg-slate-800 text-slate-400"
-                        }`}
+                        className="inline-flex items-center gap-1 text-xs text-muted"
                       >
+                        <Icon
+                          name={active ? "success" : "dropped"}
+                          size={32}
+                        />
                         {active ? ko.settings.active : ko.settings.revoked}
                       </span>
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-xs text-muted">
                         {ko.settings.createdBy(invite.createdBy.displayName)}
                       </span>
                       <time
-                        className="text-[11px] text-slate-500"
+                        className="text-xs text-muted"
                         dateTime={new Date(invite.createdAt).toISOString()}
                       >
                         {ko.time.relative(invite.createdAt)}
                       </time>
                     </div>
 
-                    <p className="mt-1 break-all text-[11px] text-slate-400">
+                    <p className="mt-1 break-all text-xs text-muted">
                       {`${window.location.origin}${invite.url}`}
                     </p>
 
@@ -196,16 +199,16 @@ export function InviteSection({ projectId }: InviteSectionProps) {
                       {active ? (
                         <>
                           <CopyInviteButton url={invite.url} />
-                          <button
-                            type="button"
+                          <Button
+                            variant="danger"
+                            icon="dropped"
                             onClick={() => handleRevoke(invite.id)}
                             disabled={revokingId === invite.id}
-                            className="rounded-lg border border-rose-500/30 px-2.5 py-1 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {revokingId === invite.id
                               ? ko.settings.revokingInvite
                               : ko.settings.revokeInvite}
-                          </button>
+                          </Button>
                         </>
                       ) : null}
                     </div>
@@ -216,7 +219,7 @@ export function InviteSection({ projectId }: InviteSectionProps) {
           )
         ) : null}
       </div>
-    </section>
+    </Panel>
   );
 }
 

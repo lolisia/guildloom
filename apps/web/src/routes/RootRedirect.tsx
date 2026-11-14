@@ -7,6 +7,7 @@ import { Navigate } from "react-router-dom";
 
 import { fetchProjects } from "../api/projects";
 import { LAST_PROJECT_STORAGE_KEY } from "../components/AppLayout";
+import { Button, EmptyState } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -32,7 +33,7 @@ export default function RootRedirect() {
 
   if (projectsQuery.isPending) {
     return (
-      <p role="status" className="text-sm text-slate-400">
+      <p role="status" className="text-sm text-muted">
         {ko.common.loading}
       </p>
     );
@@ -41,16 +42,16 @@ export default function RootRedirect() {
   if (projectsQuery.isError) {
     return (
       <div className="flex flex-col items-start gap-3">
-        <p className="text-sm text-rose-300">{ko.errors.loadFailed}</p>
-        <button
-          type="button"
+        <p className="text-sm text-brick">{ko.errors.loadFailed}</p>
+        <Button
+          variant="secondary"
+          icon="refresh"
           onClick={() => {
             void projectsQuery.refetch();
           }}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
         >
           {ko.common.retry}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -58,14 +59,11 @@ export default function RootRedirect() {
   const firstProject = projectsQuery.data[0];
   if (!firstProject) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-800 p-8 text-center">
-        <p className="text-sm font-medium text-slate-300">
-          {ko.common.noProjects}
-        </p>
-        <p className="mt-1 text-xs text-slate-500">
-          {ko.common.noProjectsHint}
-        </p>
-      </div>
+      <EmptyState
+        icon="guild"
+        text={ko.common.noProjects}
+        action={<p className="text-xs text-muted">{ko.common.noProjectsHint}</p>}
+      />
     );
   }
 

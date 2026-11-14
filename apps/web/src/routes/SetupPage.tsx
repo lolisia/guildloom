@@ -24,6 +24,7 @@ import {
   validateLoginId,
   validatePassword,
 } from "../components/auth/validation";
+import { Button } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -117,8 +118,12 @@ export default function SetupPage() {
 
   if (setupStatusQuery.isPending) {
     return (
-      <AuthPanel title={ko.setup.title} description={ko.setup.description}>
-        <p role="status" className="text-sm text-slate-400">
+      <AuthPanel
+        icon="guild"
+        title={ko.setup.title}
+        description={ko.setup.description}
+      >
+        <p role="status" className="text-sm text-muted">
           {ko.common.loading}
         </p>
       </AuthPanel>
@@ -127,17 +132,21 @@ export default function SetupPage() {
 
   if (setupStatusQuery.isError) {
     return (
-      <AuthPanel title={ko.setup.title} description={ko.setup.description}>
-        <p role="alert" className="text-sm text-rose-300">
+      <AuthPanel
+        icon="guild"
+        title={ko.setup.title}
+        description={ko.setup.description}
+      >
+        <p role="alert" className="text-sm text-brick">
           {ko.errors.loadFailed}
         </p>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          icon="refresh"
           onClick={() => void setupStatusQuery.refetch()}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
         >
           {ko.common.retry}
-        </button>
+        </Button>
       </AuthPanel>
     );
   }
@@ -150,6 +159,7 @@ export default function SetupPage() {
 
   return (
     <AuthPanel
+      icon="guild"
       title={ko.setup.title}
       heading={ko.setup.heading}
       description={ko.setup.description}
@@ -204,6 +214,7 @@ export default function SetupPage() {
           placeholder={ko.setup.passwordPlaceholder}
           autoComplete="new-password"
           required
+          icon="key"
           error={errors.password}
         />
 
@@ -216,6 +227,7 @@ export default function SetupPage() {
           placeholder={ko.setup.passwordPlaceholder}
           autoComplete="new-password"
           required
+          icon="key"
           error={errors.passwordConfirm}
         />
 
@@ -227,13 +239,15 @@ export default function SetupPage() {
           }
         />
 
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          icon="guild"
+          className="w-full"
           disabled={setupMutation.isPending}
-          className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {setupMutation.isPending ? ko.setup.submitting : ko.setup.submit}
-        </button>
+        </Button>
       </form>
     </AuthPanel>
   );

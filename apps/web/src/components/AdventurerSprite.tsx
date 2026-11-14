@@ -1,11 +1,17 @@
 /**
  * Placeholder adventurer avatar.
  *
- * M1 has no sprite sheet yet, so this renders a rounded square with the first
- * character of the display name over a deterministic, per-user colour. The
- * props interface is fixed: later tasks can swap the internals for a real
- * sprite sheet without touching call sites. Animation state is exposed only
- * through `data-state` so styling/tests do not depend on the render shape.
+ * M1 has no sprite sheet yet, so this renders a square with the first character
+ * of the display name over a deterministic, per-user colour. The props
+ * interface is fixed: later tasks can swap the internals for a real sprite
+ * sheet without touching call sites. Animation state is exposed only through
+ * `data-state` so styling/tests do not depend on the render shape.
+ *
+ * Shape follows DESIGN.md: 2px corners (never a circle), a 1.5px `line-strong`
+ * outline, a light initial and no shadow. Backgrounds come from the mid-tones
+ * of the JRPG icon palette so avatars sit in the same world as the quest icons;
+ * each one is checked against the initial colour for WCAG AA (4.5:1) in both
+ * themes by `test/sprite.test.tsx`.
  */
 import type { AdventurerState } from "@guildloom/shared";
 
@@ -28,20 +34,35 @@ const SIZE_CLASSES: Record<AdventurerSpriteSize, string> = {
   lg: "h-14 w-14 text-xl",
 };
 
-/** Palette intentionally readable against the dark guild UI. */
-const AVATAR_COLORS = [
-  "#b45309",
-  "#a16207",
-  "#4d7c0f",
-  "#15803d",
-  "#0f766e",
-  "#0e7490",
-  "#1d4ed8",
-  "#6d28d9",
-  "#a21caf",
-  "#be123c",
-  "#b91c1c",
-  "#475569",
+/**
+ * Initial colour for every avatar, independent of the active theme.
+ *
+ * This is the light-theme paper value, mirrored as `--color-avatar-ink` in
+ * `index.css` (never overridden under `[data-theme="dark"]`). Reusing
+ * `--color-paper` would render the initial `#23232F` in dark mode, which drops
+ * most palette mid-tones to 1.2–3.5:1. Keeping the light value in both themes
+ * lets every palette entry clear WCAG AA (4.5:1).
+ */
+export const AVATAR_INITIAL_COLOR = "#FAFAF6";
+
+/**
+ * Mid-tones from the `jrpg-v1` palette. Every entry is dark enough for the
+ * theme-independent {@link AVATAR_INITIAL_COLOR} initial (≥ 4.5:1); `test/
+ * sprite.test.tsx` fails if a colour is added or lightened below that bar.
+ */
+export const AVATAR_COLORS = [
+  "#20585b",
+  "#793d35",
+  "#614a28",
+  "#35516b",
+  "#654365",
+  "#482d2b",
+  "#287b79",
+  "#806046",
+  "#a65343",
+  "#8a6426",
+  "#56768e",
+  "#2d786e",
 ] as const;
 
 /** FNV-1a hash; deterministic across browsers and Node. */
@@ -67,7 +88,7 @@ export function avatarInitial(displayName: string): string {
   return first ?? "?";
 }
 
-/** Rounded-square avatar placeholder for an adventurer. */
+/** Square avatar placeholder for an adventurer. */
 export function AdventurerSprite({
   userId,
   displayName,
@@ -78,7 +99,7 @@ export function AdventurerSprite({
 
   return (
     <span
-      className={`inline-flex shrink-0 select-none items-center justify-center rounded-md font-bold leading-none text-white shadow-inner ${SIZE_CLASSES[size]}`}
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-sm border-[1.5px] border-line-strong font-bold leading-none text-avatar-ink ${SIZE_CLASSES[size]}`}
       style={{ backgroundColor: avatarColorForUserId(userId) }}
       data-user-id={userId}
       data-state={state}

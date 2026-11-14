@@ -1,11 +1,17 @@
 /**
  * Guild member list with adventurer avatars, Korean role labels and levels.
+ *
+ * Sprites stay square per DESIGN.md. Role and level use the pack icons and the
+ * pixel font; the role label remains plain Korean text for assistive tech and
+ * for the settings tests.
  */
 import { levelProgress } from "@guildloom/shared";
 import type { ProjectMember } from "@guildloom/shared";
 
 import { ko } from "../../i18n/ko";
 import AdventurerSprite from "../AdventurerSprite";
+import Icon from "../Icon";
+import { Panel } from "../ui";
 
 export interface MemberListProps {
   members: ProjectMember[];
@@ -14,16 +20,16 @@ export interface MemberListProps {
 /** Renders every guild member from `GET /api/projects/:pid`. */
 export function MemberList({ members }: MemberListProps) {
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+    <Panel>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-bold text-slate-200">
+        <h2 className="text-sm font-semibold text-ink">
           {ko.settings.members}
         </h2>
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-muted">
           {ko.settings.memberCount(members.length)}
         </span>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-muted">
         {ko.settings.membersDescription}
       </p>
 
@@ -33,7 +39,7 @@ export function MemberList({ members }: MemberListProps) {
           return (
             <li
               key={member.userId}
-              className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2"
+              className="flex flex-wrap items-center gap-3 rounded-sm border border-line bg-paper px-3 py-2"
             >
               <AdventurerSprite
                 userId={member.userId}
@@ -41,35 +47,35 @@ export function MemberList({ members }: MemberListProps) {
                 size="sm"
               />
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="truncate text-sm font-semibold text-slate-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-ink">
                     {member.displayName}
                   </span>
                   <span
                     data-role={member.role}
-                    className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                      member.role === "owner"
-                        ? "bg-amber-500/15 text-amber-300"
-                        : "bg-slate-800 text-slate-300"
-                    }`}
+                    className="inline-flex items-center gap-1 text-xs text-muted"
                   >
+                    <Icon
+                      name={member.role === "owner" ? "boss" : "adventurer"}
+                      size={32}
+                    />
                     {member.role === "owner"
                       ? ko.settings.roleOwner
                       : ko.settings.roleMember}
                   </span>
                 </div>
-                <p className="mt-0.5 text-[11px] text-slate-500">
+                <p className="mt-0.5 font-pixel text-xs text-muted">
                   {ko.tabs.xp(progress.current, progress.next)}
                 </p>
               </div>
-              <span className="text-xs font-bold text-amber-300">
+              <span className="font-pixel text-xs font-bold text-gold">
                 {ko.tabs.level(member.level)}
               </span>
             </li>
           );
         })}
       </ul>
-    </section>
+    </Panel>
   );
 }
 

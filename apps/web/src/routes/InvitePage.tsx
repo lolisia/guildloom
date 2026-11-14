@@ -33,6 +33,8 @@ import {
   validateLoginId,
   validatePassword,
 } from "../components/auth/validation";
+import Icon from "../components/Icon";
+import { Button, Panel } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -49,17 +51,19 @@ type SignupFieldErrors = Partial<Record<keyof SignupValues, string>>;
 function InvalidInvite() {
   return (
     <AuthPanel
+      icon="invite"
       title={ko.invite.title}
       heading={ko.invite.heading}
       description={ko.invite.description}
     >
-      <p role="alert" className="text-sm text-rose-300">
+      <p role="alert" className="text-sm text-brick">
         {ko.invite.invalid}
       </p>
       <Link
         to="/login"
-        className="inline-block rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border-[1.5px] border-line-strong bg-paper px-3 text-sm font-medium text-ink"
       >
+        <Icon name="login" size={32} />
         {ko.invite.loginLink}
       </Link>
     </AuthPanel>
@@ -139,12 +143,10 @@ function SignupForm({ code }: { code: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       <div>
-        <h2 className="text-sm font-semibold text-slate-200">
+        <h2 className="text-sm font-semibold text-ink">
           {ko.invite.signupTitle}
         </h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {ko.invite.signupDescription}
-        </p>
+        <p className="mt-1 text-xs text-muted">{ko.invite.signupDescription}</p>
       </div>
 
       <FormField
@@ -183,6 +185,7 @@ function SignupForm({ code }: { code: string }) {
         placeholder={ko.invite.passwordPlaceholder}
         autoComplete="new-password"
         required
+        icon="key"
         error={errors.password}
       />
 
@@ -195,20 +198,23 @@ function SignupForm({ code }: { code: string }) {
         placeholder={ko.invite.passwordPlaceholder}
         autoComplete="new-password"
         required
+        icon="key"
         error={errors.passwordConfirm}
       />
 
       <FormAlert message={serverError} />
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        icon="invite"
+        className="w-full"
         disabled={signupMutation.isPending}
-        className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {signupMutation.isPending
           ? ko.invite.signingUp
           : ko.invite.signup}
-      </button>
+      </Button>
     </form>
   );
 }
@@ -233,12 +239,10 @@ function JoinForm({ code }: { code: string }) {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-slate-200">
+        <h2 className="text-sm font-semibold text-ink">
           {ko.invite.joinTitle}
         </h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {ko.invite.joinDescription}
-        </p>
+        <p className="mt-1 text-xs text-muted">{ko.invite.joinDescription}</p>
       </div>
 
       <FormAlert
@@ -249,14 +253,16 @@ function JoinForm({ code }: { code: string }) {
         }
       />
 
-      <button
+      <Button
         type="button"
+        variant="primary"
+        icon="login"
+        className="w-full"
         onClick={() => joinMutation.mutate()}
         disabled={joinMutation.isPending}
-        className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {joinMutation.isPending ? ko.invite.joining : ko.invite.join}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -285,11 +291,12 @@ export default function InvitePage() {
   if (inviteQuery.isPending) {
     return (
       <AuthPanel
+        icon="invite"
         title={ko.invite.title}
         heading={ko.invite.heading}
         description={ko.invite.loading}
       >
-        <p role="status" className="text-sm text-slate-400">
+        <p role="status" className="text-sm text-muted">
           {ko.invite.loading}
         </p>
       </AuthPanel>
@@ -306,27 +313,30 @@ export default function InvitePage() {
 
   return (
     <AuthPanel
+      icon="invite"
       title={ko.invite.title}
       heading={ko.invite.heading}
       description={ko.invite.description}
     >
-      <dl className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm">
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-xs text-slate-400">{ko.invite.projectName}</dt>
-          <dd className="font-semibold text-slate-100">{invite.projectName}</dd>
-        </div>
-        <div className="mt-1.5 flex items-baseline justify-between gap-3">
-          <dt className="text-xs text-slate-400">{ko.invite.code}</dt>
-          <dd>
-            <code className="rounded bg-slate-900 px-1.5 py-0.5 text-xs text-emerald-300">
-              {inviteCode}
-            </code>
-          </dd>
-        </div>
-      </dl>
+      <Panel>
+        <dl className="space-y-1.5 text-sm">
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-xs text-muted">{ko.invite.projectName}</dt>
+            <dd className="font-semibold text-ink">{invite.projectName}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-xs text-muted">{ko.invite.code}</dt>
+            <dd>
+              <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-xs text-teal">
+                {inviteCode}
+              </code>
+            </dd>
+          </div>
+        </dl>
+      </Panel>
 
       {meQuery.isPending ? (
-        <p role="status" className="text-sm text-slate-400">
+        <p role="status" className="text-sm text-muted">
           {ko.common.loading}
         </p>
       ) : user ? (

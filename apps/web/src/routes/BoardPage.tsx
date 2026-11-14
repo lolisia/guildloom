@@ -33,6 +33,7 @@ import {
   type QuestMovePlan,
 } from "../components/board/movePlan";
 import QuestDrawer from "../components/quest/QuestDrawer";
+import { Button, Panel } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -223,8 +224,8 @@ export default function BoardPage() {
 
   if (parsedProjectId === null) {
     return (
-      <section className="space-y-2">
-        <p role="alert" className="text-sm text-rose-300">
+      <section className="min-h-full space-y-2 bg-ground text-ink">
+        <p role="alert" className="text-sm text-brick">
           {ko.errors.notFound}
         </p>
       </section>
@@ -232,31 +233,30 @@ export default function BoardPage() {
   }
 
   return (
-    <section className="space-y-3">
+    <section className="min-h-full space-y-4 bg-ground text-ink">
       <h1 className="sr-only">{ko.board.title}</h1>
 
       {questsQuery.isPending ? (
-        <p role="status" className="text-xs text-slate-500">
+        <p role="status" className="text-xs text-muted">
           {ko.board.loading}
         </p>
       ) : null}
 
       {questsQuery.isError ? (
-        <div className="flex items-center gap-2">
-          <p role="alert" className="text-xs text-rose-300">
+        <Panel className="flex flex-wrap items-center gap-3">
+          <p role="alert" className="text-[13px] text-brick">
             {ko.board.loadFailed}
           </p>
-          <button
-            type="button"
+          <Button
+            icon="refresh"
             onClick={() => void questsQuery.refetch()}
-            className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
           >
             {ko.common.retry}
-          </button>
-        </div>
+          </Button>
+        </Panel>
       ) : null}
 
-      <p className="text-[11px] text-slate-500">{ko.board.dragHint}</p>
+      <p className="text-[13px] text-muted">{ko.board.dragHint}</p>
 
       <DndContext
         sensors={sensors}
@@ -264,7 +264,10 @@ export default function BoardPage() {
         onDragEnd={handleDragEnd}
         onDragCancel={markJustDragged}
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div
+          data-testid="board-grid"
+          className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+        >
           {BOARD_COLUMNS.map((stage) => (
             <BoardColumn
               key={stage}
@@ -281,7 +284,7 @@ export default function BoardPage() {
       </DndContext>
 
       {moveMutation.isError ? (
-        <p role="alert" className="text-xs text-rose-300">
+        <p role="alert" className="text-[13px] text-brick">
           {ko.board.moveFailed}
         </p>
       ) : null}

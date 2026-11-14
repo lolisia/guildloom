@@ -4,6 +4,11 @@
  * Filters (text, multi-select stage, tag) are sent to the list endpoint; the
  * eight columns sort client-side on header clicks. Clicking a row opens the
  * same `?quest=<id>` drawer as the board.
+ *
+ * The table follows DESIGN.md: a paper panel holds the filters, the header row
+ * sits on the sunken layer, rows are separated by a 1px line and darken to
+ * sunken on hover. Stage and rank columns use the pixel icon pack at its native
+ * 32px size.
  */
 import {
   RANKS,
@@ -19,10 +24,14 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { fetchQuests, fetchTags } from "../api/quests";
 import AdventurerSprite from "../components/AdventurerSprite";
+import Icon from "../components/Icon";
 import QuestDrawer from "../components/quest/QuestDrawer";
+import RankBadge from "../components/RankBadge";
+import { Button, Chip, Panel, TextInput } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { formatKoreanDate } from "../lib/format";
 import { isImeComposing } from "../lib/ime";
+import { STAGE_ICON } from "../lib/icons";
 import { queryKeys } from "../lib/queryKeys";
 
 /** The eight ledger columns, in display order. */
@@ -214,7 +223,7 @@ export default function LedgerPage() {
   if (parsedProjectId === null) {
     return (
       <section className="space-y-2">
-        <p role="alert" className="text-sm text-rose-300">
+        <p role="alert" className="text-sm text-brick">
           {ko.errors.notFound}
         </p>
       </section>
@@ -222,48 +231,47 @@ export default function LedgerPage() {
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-bold tracking-tight">{ko.ledger.title}</h1>
-        <p className="text-sm text-slate-400">{ko.ledger.description}</p>
-        <p className="text-[11px] text-slate-500">{ko.ledger.sortHint}</p>
+        <h1 className="text-xl font-semibold text-ink">{ko.ledger.title}</h1>
+        <p className="text-sm text-muted">{ko.ledger.description}</p>
+        <p className="text-xs text-muted">{ko.ledger.sortHint}</p>
       </header>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+      <Panel className="flex flex-wrap items-end gap-3">
         <div className="min-w-48 space-y-1">
           <label
             htmlFor={searchInputId}
-            className="block text-[11px] font-semibold text-slate-400"
+            className="block text-xs font-medium text-muted"
           >
             {ko.common.search}
           </label>
-          <input
+          <TextInput
             id={searchInputId}
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             aria-label={ko.common.search}
             placeholder={ko.board.searchPlaceholder}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500/70"
           />
         </div>
 
         <fieldset className="space-y-1">
-          <legend className="text-[11px] font-semibold text-slate-400">
+          <legend className="text-xs font-medium text-muted">
             {ko.quest.stage}
           </legend>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {STAGES.map((stage) => (
               <label
                 key={stage}
-                className="inline-flex items-center gap-1 text-xs text-slate-300"
+                className="inline-flex items-center gap-1 text-xs text-ink"
               >
                 <input
                   type="checkbox"
                   checked={selectedStages.includes(stage)}
                   onChange={() => toggleStage(stage)}
                   aria-label={ko.quest.stages[stage]}
-                  className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-900 accent-emerald-500"
+                  className="h-4 w-4 rounded-sm border border-line-strong accent-teal"
                 />
                 {ko.quest.stages[stage]}
               </label>
@@ -274,7 +282,7 @@ export default function LedgerPage() {
         <div className="min-w-40 space-y-1">
           <label
             htmlFor={tagSelectId}
-            className="block text-[11px] font-semibold text-slate-400"
+            className="block text-xs font-medium text-muted"
           >
             {ko.board.filterByTag}
           </label>
@@ -283,7 +291,7 @@ export default function LedgerPage() {
             value={tag}
             onChange={(event) => setTag(event.target.value)}
             aria-label={ko.board.filterByTag}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-emerald-500/70"
+            className="h-8 w-full rounded-sm border-[1.5px] border-line-strong bg-paper px-2 text-sm text-ink"
           >
             <option value="">{ko.board.allTags}</option>
             {(tagsQuery.data ?? []).map((tagSummary) => (
@@ -294,40 +302,37 @@ export default function LedgerPage() {
           </select>
         </div>
 
-        <button
-          type="button"
-          onClick={resetFilters}
-          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-        >
+        <Button variant="ghost" onClick={resetFilters}>
           {ko.board.clearFilters}
-        </button>
-      </div>
+        </Button>
+      </Panel>
 
       {questsQuery.isError ? (
         <div className="flex items-center gap-2">
-          <p role="alert" className="text-xs text-rose-300">
+          <p role="alert" className="text-xs text-brick">
             {ko.ledger.loadFailed}
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void questsQuery.refetch()}
-            className="rounded-md bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
           >
             {ko.common.retry}
-          </button>
+          </Button>
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
-        <table className="w-full border-collapse text-left text-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse bg-paper text-left text-sm">
           <caption className="sr-only">{ko.ledger.title}</caption>
-          <thead>
-            <tr className="bg-slate-900/80">
+          <thead className="bg-sunken">
+            <tr>
               {LEDGER_COLUMNS.map((column) => {
                 const active = sort?.column === column;
-                const ariaSort = !active
+                const activeDirection = active ? sort?.direction : undefined;
+                const ariaSort = !activeDirection
                   ? "none"
-                  : sort.direction === "asc"
+                  : activeDirection === "asc"
                     ? "ascending"
                     : "descending";
                 return (
@@ -335,18 +340,25 @@ export default function LedgerPage() {
                     key={column}
                     scope="col"
                     aria-sort={ariaSort}
-                    className="whitespace-nowrap border-b border-slate-800 px-2 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+                    className="whitespace-nowrap border-b border-line px-2 py-1.5 text-left"
                   >
                     <button
                       type="button"
                       onClick={() => toggleSort(column)}
                       aria-label={ko.ledger.sortBy(ko.ledger.columns[column])}
-                      className="flex w-full items-center gap-1 rounded px-0.5 text-left hover:text-slate-200"
+                      className="inline-flex items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left font-pixel text-xs text-muted hover:text-ink"
                     >
                       {ko.ledger.columns[column]}
-                      <span aria-hidden="true" className="text-[9px] text-emerald-300">
-                        {active ? (sort.direction === "asc" ? "▲" : "▼") : ""}
-                      </span>
+                      {activeDirection ? (
+                        <Icon
+                          name={
+                            activeDirection === "asc"
+                              ? "sort-ascending"
+                              : "sort-descending"
+                          }
+                          size={32}
+                        />
+                      ) : null}
                     </button>
                   </th>
                 );
@@ -356,7 +368,10 @@ export default function LedgerPage() {
           <tbody>
             {questsQuery.isPending && selectedStages.length > 0 ? (
               <tr>
-                <td colSpan={LEDGER_COLUMNS.length} className="px-3 py-4 text-xs text-slate-500">
+                <td
+                  colSpan={LEDGER_COLUMNS.length}
+                  className="px-3 py-6 text-xs text-muted"
+                >
                   {ko.ledger.loading}
                 </td>
               </tr>
@@ -366,7 +381,10 @@ export default function LedgerPage() {
             (selectedStages.length === 0 ||
               (!questsQuery.isPending && !questsQuery.isError)) ? (
               <tr>
-                <td colSpan={LEDGER_COLUMNS.length} className="px-3 py-4 text-xs text-slate-500">
+                <td
+                  colSpan={LEDGER_COLUMNS.length}
+                  className="px-3 py-6 text-xs text-muted"
+                >
                   {ko.ledger.empty}
                 </td>
               </tr>
@@ -389,12 +407,12 @@ export default function LedgerPage() {
                   event.preventDefault();
                   openQuest(quest.id);
                 }}
-                className="cursor-pointer border-b border-slate-800/60 bg-slate-950/30 align-middle hover:bg-slate-900/70 focus-visible:bg-slate-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+                className="cursor-pointer border-b border-line align-middle transition-colors hover:bg-sunken focus-visible:bg-sunken"
               >
-                <td className="whitespace-nowrap px-2 py-2 text-xs font-bold text-slate-400">
-                  {quest.number}
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-muted">
+                  #{quest.number}
                 </td>
-                <td className="max-w-64 px-2 py-2 text-sm font-medium text-slate-100">
+                <td className="max-w-64 px-2 py-2 text-sm font-medium text-ink">
                   <span className="block truncate" title={quest.title}>
                     {quest.title}
                   </span>
@@ -403,25 +421,23 @@ export default function LedgerPage() {
                   {quest.tags.length > 0 ? (
                     <span className="flex flex-wrap gap-1">
                       {quest.tags.map((questTag) => (
-                        <span
-                          key={questTag}
-                          className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-300"
-                        >
-                          {questTag}
-                        </span>
+                        <Chip key={questTag}>{questTag}</Chip>
                       ))}
                     </span>
                   ) : (
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-xs text-muted">
                       {ko.ledger.noTags}
                     </span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-xs text-slate-300">
-                  {ko.quest.stages[quest.stage]}
+                <td className="whitespace-nowrap px-2 py-2">
+                  <span className="inline-flex items-center gap-2 text-xs text-ink">
+                    <Icon name={STAGE_ICON[quest.stage]} size={32} />
+                    {ko.quest.stages[quest.stage]}
+                  </span>
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-xs font-bold text-amber-300">
-                  {quest.rank ?? ko.ledger.noRank}
+                <td className="whitespace-nowrap px-2 py-2">
+                  <RankBadge rank={quest.rank} size={32} />
                 </td>
                 <td className="px-2 py-2">
                   <span className="flex items-center gap-2">
@@ -430,15 +446,15 @@ export default function LedgerPage() {
                       displayName={quest.createdBy.displayName}
                       size="sm"
                     />
-                    <span className="max-w-32 truncate text-xs text-slate-300">
+                    <span className="max-w-32 truncate text-xs text-ink">
                       {quest.createdBy.displayName}
                     </span>
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-xs text-slate-400">
+                <td className="whitespace-nowrap px-2 py-2 text-xs text-muted">
                   {formatKoreanDate(quest.createdAt)}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-xs text-slate-400">
+                <td className="whitespace-nowrap px-2 py-2 text-xs text-muted">
                   {formatKoreanDate(quest.updatedAt)}
                 </td>
               </tr>

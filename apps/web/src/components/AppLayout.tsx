@@ -4,6 +4,9 @@
  *
  * Visiting any `/g/:projectId` route records the guild in `gl:lastProject` so
  * `/` can send the adventurer back to where they were.
+ *
+ * The shell sits on the ground surface with the paper top bar above it
+ * (DESIGN.md): depth comes from the ground/paper/sunken steps, not shadows.
  */
 import { useEffect } from "react";
 import { Outlet, useParams } from "react-router-dom";
@@ -29,7 +32,7 @@ export function AppLayout() {
   }, [projectId]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-ground font-body text-ink">
       <TabBar />
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
         <Outlet />

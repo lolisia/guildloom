@@ -7,9 +7,11 @@ import { useParams } from "react-router-dom";
 import { fetchMe } from "../api/auth";
 import { fetchProject } from "../api/projects";
 import { apiErrorMessage } from "../components/auth/apiErrorMessage";
+import Icon from "../components/Icon";
 import GuildNameForm from "../components/settings/GuildNameForm";
 import InviteSection from "../components/settings/InviteSection";
 import MemberList from "../components/settings/MemberList";
+import { Button, Panel } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -19,6 +21,16 @@ function parseProjectId(raw: string | undefined): number | null {
   }
   const parsed = Number(raw);
   return Number.isInteger(parsed) ? parsed : null;
+}
+
+/** Page title with the settings pack icon. */
+function SettingsTitle() {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon name="settings" size={32} />
+      <h1 className="text-xl font-semibold text-ink">{ko.settings.title}</h1>
+    </div>
+  );
 }
 
 export default function GuildSettingsPage() {
@@ -45,41 +57,41 @@ export default function GuildSettingsPage() {
 
   if (projectId === null) {
     return (
-      <section className="space-y-2">
-        <h1 className="text-xl font-bold tracking-tight">{ko.settings.title}</h1>
-        <p role="alert" className="text-sm text-rose-300">
+      <Panel className="space-y-2">
+        <SettingsTitle />
+        <p role="alert" className="text-sm text-brick">
           {ko.errors.notFound}
         </p>
-      </section>
+      </Panel>
     );
   }
 
   if (projectQuery.isPending || meQuery.isPending) {
     return (
-      <section className="space-y-2">
-        <h1 className="text-xl font-bold tracking-tight">{ko.settings.title}</h1>
-        <p role="status" className="text-sm text-slate-400">
+      <Panel className="space-y-2">
+        <SettingsTitle />
+        <p role="status" className="text-sm text-muted">
           {ko.common.loading}
         </p>
-      </section>
+      </Panel>
     );
   }
 
   if (projectQuery.isError) {
     return (
-      <section className="space-y-3">
-        <h1 className="text-xl font-bold tracking-tight">{ko.settings.title}</h1>
-        <p role="alert" className="text-sm text-rose-300">
+      <Panel className="space-y-3">
+        <SettingsTitle />
+        <p role="alert" className="text-sm text-brick">
           {apiErrorMessage(projectQuery.error, ko.settings.loadFailed)}
         </p>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          icon="refresh"
           onClick={() => void projectQuery.refetch()}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
         >
           {ko.common.retry}
-        </button>
-      </section>
+        </Button>
+      </Panel>
     );
   }
 
@@ -94,8 +106,8 @@ export default function GuildSettingsPage() {
   return (
     <section className="space-y-5">
       <header>
-        <h1 className="text-xl font-bold tracking-tight">{ko.settings.title}</h1>
-        <p className="mt-1 text-sm text-slate-400">{ko.settings.description}</p>
+        <SettingsTitle />
+        <p className="mt-1 text-sm text-muted">{ko.settings.description}</p>
       </header>
 
       <GuildNameForm

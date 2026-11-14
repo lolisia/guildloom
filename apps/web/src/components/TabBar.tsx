@@ -1,7 +1,12 @@
 /**
  * Top navigation: one tab per guild the adventurer belongs to, a create-guild
  * action, board/ledger/settings toggles and the adventurer summary
- * (sprite, name, level, XP bar, logout).
+ * (sprite, name, level, XP bar, theme menu, logout).
+ *
+ * Styling follows DESIGN.md: a sticky paper bar over a 1.5px `line-strong`
+ * rule, outlined ground-filled tabs for the current guild/view, 32px pack
+ * icons with visible Korean labels, and a gold XP bar that is the only reward
+ * accent in the shell.
  */
 import { levelFromXp, levelProgress } from "@guildloom/shared";
 import type { MeResponse, Project, ProjectSummary } from "@guildloom/shared";
@@ -17,8 +22,25 @@ import { ko } from "../i18n/ko";
 import { isImeComposing } from "../lib/ime";
 import { queryKeys } from "../lib/queryKeys";
 import AdventurerSprite from "./AdventurerSprite";
+import Icon from "./Icon";
+import ThemeMenu from "./ThemeMenu";
+import { Button, TextInput } from "./ui";
 
 const MAX_GUILD_NAME_LENGTH = 40;
+
+/** Shared box for guild and view tabs; the active state adds the outline. */
+const TAB_BASE_CLASSES =
+  "inline-flex h-8 items-center rounded-sm text-sm transition-colors";
+const GUILD_TAB_CLASSES = `${TAB_BASE_CLASSES} max-w-44 px-2.5 font-medium`;
+const VIEW_TAB_CLASSES = `${TAB_BASE_CLASSES} gap-1.5 px-2.5`;
+const ACTIVE_TAB_CLASSES =
+  "border-[1.5px] border-line-strong bg-ground text-ink";
+const INACTIVE_TAB_CLASSES = "text-muted hover:bg-sunken hover:text-ink";
+
+/** Compose the tab classes from its base and active/inactive treatment. */
+function tabClasses(base: string, isActive: boolean): string {
+  return `${base} ${isActive ? ACTIVE_TAB_CLASSES : INACTIVE_TAB_CLASSES}`;
+}
 
 function parseProjectId(raw: string | undefined): number | null {
   if (!raw) {
@@ -132,13 +154,12 @@ export function TabBar() {
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+    <header className="sticky top-0 z-30 border-b-[1.5px] border-line-strong bg-paper">
+      <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
         <Link
           to="/"
-          className="flex items-center gap-1 text-sm font-black tracking-tight text-emerald-400"
+          className="shrink-0 font-pixel text-[16px] leading-none text-ink"
         >
-          <span aria-hidden="true">⚔</span>
           {ko.common.appName}
         </Link>
 
@@ -147,17 +168,22 @@ export function TabBar() {
           className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
         >
           {projectsQuery.isPending ? (
-            <span className="text-xs text-slate-500">{ko.common.loading}</span>
+            <span className="text-xs text-muted">{ko.common.loading}</span>
           ) : null}
 
           {projectsQuery.isError ? (
-            <button
-              type="button"
-              onClick={() => void projectsQuery.refetch()}
-              className="rounded-md px-2 py-1 text-xs text-rose-300 hover:bg-slate-800"
-            >
-              {ko.errors.loadFailed} · {ko.common.retry}
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-brick">
+                {ko.errors.loadFailed}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void projectsQuery.refetch()}
+              >
+                {ko.common.retry}
+              </Button>
+            </div>
           ) : null}
 
           {projects.map((project) => {
@@ -171,121 +197,112 @@ export function TabBar() {
                 title={
                   project.role === "owner" ? ko.tabs.owner : ko.tabs.member
                 }
-                className={`max-w-44 truncate rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? "bg-emerald-500/15 text-emerald-300"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                }`}
+                className={tabClasses(GUILD_TAB_CLASSES, isActive)}
               >
-                {project.name}
+                <span className="min-w-0 truncate">{project.name}</span>
               </Link>
             );
           })}
 
-          <button
-            type="button"
-            onClick={openCreateDialog}
+          <Button
+            variant="secondary"
+            icon="add"
             aria-label={ko.tabs.createGuild}
             title={ko.tabs.createGuild}
-            className="rounded-md border border-dashed border-slate-700 px-2 py-0.5 text-sm leading-5 text-slate-400 transition-colors hover:border-emerald-500/60 hover:text-emerald-300"
+            onClick={openCreateDialog}
           >
-            +
-          </button>
+            {ko.tabs.createGuild}
+          </Button>
         </nav>
 
         {activeProjectId !== null ? (
           <nav
             aria-label={ko.tabs.viewToggle}
-            className="flex items-center rounded-lg bg-slate-900 p-0.5 text-xs"
+            className="flex items-center gap-1"
           >
             <Link
               to={`/g/${activeProjectId}`}
               aria-current={isBoard ? "page" : undefined}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                isBoard
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
+              className={tabClasses(VIEW_TAB_CLASSES, isBoard)}
             >
-              {ko.tabs.board}
+              <Icon name="board" size={32} />
+              <span>{ko.tabs.board}</span>
             </Link>
             <Link
               to={`/g/${activeProjectId}/ledger`}
               aria-current={isLedger ? "page" : undefined}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                isLedger
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
+              className={tabClasses(VIEW_TAB_CLASSES, isLedger)}
             >
-              {ko.tabs.ledger}
+              <Icon name="ledger" size={32} />
+              <span>{ko.tabs.ledger}</span>
             </Link>
             <Link
               to={`/g/${activeProjectId}/settings`}
               aria-current={isSettings ? "page" : undefined}
-              className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
-                isSettings
-                  ? "bg-slate-800 text-slate-100"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
+              className={tabClasses(VIEW_TAB_CLASSES, isSettings)}
             >
-              {ko.tabs.settings}
+              <Icon name="settings" size={32} />
+              <span>{ko.tabs.settings}</span>
             </Link>
           </nav>
         ) : null}
 
-        {user && progress && level !== null ? (
-          <div className="flex items-center gap-2">
-            <AdventurerSprite
-              userId={user.id}
-              displayName={user.displayName}
-              size="sm"
-            />
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-2">
-                <span className="max-w-32 truncate text-xs font-semibold text-slate-200">
-                  {user.displayName}
-                </span>
-                <span className="text-[11px] font-bold text-amber-300">
-                  {ko.tabs.level(level)}
-                </span>
-              </div>
-              <div
-                role="progressbar"
-                aria-label={ko.tabs.xpLabel}
-                aria-valuemin={0}
-                aria-valuemax={progress.next}
-                aria-valuenow={progress.current}
-                title={ko.tabs.xp(progress.current, progress.next)}
-                className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-slate-800"
-              >
+        <div className="ml-auto flex items-center gap-3">
+          {user && progress && level !== null ? (
+            <div className="flex items-center gap-2">
+              <AdventurerSprite
+                userId={user.id}
+                displayName={user.displayName}
+                size="sm"
+              />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="max-w-32 truncate text-sm font-medium text-ink">
+                    {user.displayName}
+                  </span>
+                  <span className="font-pixel text-xs text-gold">
+                    {ko.tabs.level(level)}
+                  </span>
+                </div>
                 <div
-                  className="h-full rounded-full bg-amber-400 transition-[width]"
-                  style={{ width: `${xpPercent}%` }}
-                />
+                  role="progressbar"
+                  aria-label={ko.tabs.xpLabel}
+                  aria-valuemin={0}
+                  aria-valuemax={progress.next}
+                  aria-valuenow={progress.current}
+                  title={ko.tabs.xp(progress.current, progress.next)}
+                  className="mt-1 h-2 w-24 border-[1.5px] border-line-strong bg-sunken"
+                >
+                  <div
+                    className="h-full bg-gold-fill transition-[width]"
+                    style={{ width: `${xpPercent}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {user ? (
-          <button
-            type="button"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
-            className="rounded-md px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
-          >
-            {logoutMutation.isPending
-              ? ko.tabs.loggingOut
-              : ko.tabs.logout}
-          </button>
-        ) : null}
+          <ThemeMenu />
+
+          {user ? (
+            <Button
+              variant="ghost"
+              icon="logout"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+            >
+              {logoutMutation.isPending
+                ? ko.tabs.loggingOut
+                : ko.tabs.logout}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {isCreateOpen
         ? createPortal(
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
               onMouseDown={handleOverlayMouseDown}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
@@ -297,14 +314,17 @@ export function TabBar() {
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={dialogTitleId}
-                className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl"
+                className="w-full max-w-sm rounded-sm border-[1.5px] border-line-strong bg-paper p-5 shadow-hard"
               >
                 <form onSubmit={handleCreateSubmit} className="space-y-4">
                   <div>
-                    <h2 id={dialogTitleId} className="text-base font-bold">
+                    <h2
+                      id={dialogTitleId}
+                      className="text-base font-semibold text-ink"
+                    >
                       {ko.tabs.createGuildTitle}
                     </h2>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-muted">
                       {ko.tabs.createGuildDescription}
                     </p>
                   </div>
@@ -312,11 +332,11 @@ export function TabBar() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor={guildNameInputId}
-                      className="block text-xs font-medium text-slate-300"
+                      className="block text-xs font-medium text-ink"
                     >
                       {ko.tabs.guildName}
                     </label>
-                    <input
+                    <TextInput
                       id={guildNameInputId}
                       value={guildName}
                       onChange={(event) => setGuildName(event.target.value)}
@@ -324,33 +344,28 @@ export function TabBar() {
                       placeholder={ko.tabs.guildNamePlaceholder}
                       maxLength={MAX_GUILD_NAME_LENGTH}
                       autoFocus
-                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500/70"
                     />
                   </div>
 
                   {createMutation.isError ? (
-                    <p role="alert" className="text-xs text-rose-300">
+                    <p role="alert" className="text-xs text-brick">
                       {ko.tabs.createFailed}
                     </p>
                   ) : null}
 
                   <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={closeCreateDialog}
-                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                    >
+                    <Button variant="ghost" onClick={closeCreateDialog}>
                       {ko.common.cancel}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="submit"
+                      variant="primary"
                       disabled={!guildName.trim() || createMutation.isPending}
-                      className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {createMutation.isPending
                         ? ko.tabs.creating
                         : ko.common.create}
-                    </button>
+                    </Button>
                   </div>
                 </form>
               </div>

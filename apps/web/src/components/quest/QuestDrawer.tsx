@@ -8,6 +8,9 @@
  * board and ledger lists so cards stay in sync. Tags go through a dedicated
  * optimistic mutation so rapid chip edits accumulate locally instead of
  * racing stale server state.
+ *
+ * Layout follows DESIGN.md: the page is dimmed with ink at 40% (never a blur)
+ * and a paper panel slides in from the right behind a 1.5px line-strong rule.
  */
 import {
   RANKS,
@@ -29,10 +32,15 @@ import {
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
 import { isImeComposing } from "../../lib/ime";
+import { STAGE_ICON } from "../../lib/icons";
 import { queryKeys } from "../../lib/queryKeys";
 import AdventurerSprite from "../AdventurerSprite";
+import Icon from "../Icon";
+import RankBadge from "../RankBadge";
+import { Button, TextInput } from "../ui";
 import EditableTextSection from "./EditableTextSection";
 import EventTimeline from "./EventTimeline";
+import { STAGE_MARK_CLASSES } from "./stageMark";
 import TagEditor from "./TagEditor";
 
 /** Props for {@link QuestDrawer}. */
@@ -209,49 +217,45 @@ export function QuestDrawer({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex justify-end bg-slate-950/70 backdrop-blur-sm"
+      className="fixed inset-0 z-40 flex justify-end bg-ink/40"
       onMouseDown={overlayMouseDown}
     >
       <aside
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex h-full w-full max-w-xl flex-col border-l border-slate-800 bg-slate-900 shadow-2xl"
+        className="flex h-full w-full max-w-xl flex-col rounded-none border-l-[1.5px] border-line-strong bg-paper"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
-          <h2 id={titleId} className="text-base font-bold text-slate-100">
+        <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <h2 id={titleId} className="text-base font-semibold text-ink">
             {ko.board.drawer.title}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label={ko.common.close}
-            className="rounded-md px-2 py-1 text-sm text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-sm p-1 text-ink transition-colors hover:bg-sunken"
           >
-            ✕
+            <Icon name="close" size={32} />
           </button>
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-4">
           {questQuery.isPending ? (
-            <p role="status" className="text-sm text-slate-400">
+            <p role="status" className="text-sm text-muted">
               {ko.common.loading}
             </p>
           ) : null}
 
           {questQuery.isError ? (
             <div className="space-y-2">
-              <p role="alert" className="text-sm text-rose-300">
+              <p role="alert" className="text-sm text-brick">
                 {ko.quest.loadFailed}
               </p>
-              <button
-                type="button"
-                onClick={() => void questQuery.refetch()}
-                className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-              >
+              <Button size="sm" onClick={() => void questQuery.refetch()}>
                 {ko.common.retry}
-              </button>
+              </Button>
             </div>
           ) : null}
 
@@ -260,14 +264,24 @@ export function QuestDrawer({
               <div
                 data-testid="quest-dungeon-placeholder"
                 style={{ height: "120px" }}
-                className="relative flex w-full shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-slate-800 bg-gradient-to-b from-indigo-950/70 to-slate-950"
+                className="relative flex w-full shrink-0 items-center justify-center overflow-hidden rounded-sm border-[1.5px] border-line-strong bg-sunken"
               >
-                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  {ko.board.drawer.dungeonView}
-                </span>
-                <p className="text-sm font-semibold text-slate-300">
-                  {ko.board.drawer.dungeonComingSoon}
-                </p>
+                <div className="absolute inset-y-3 left-3 flex flex-col items-center justify-center gap-1">
+                  <Icon name={STAGE_ICON[quest.stage]} size={64} />
+                  <span
+                    aria-hidden="true"
+                    data-stage-mark={quest.stage}
+                    className={`h-0.5 w-10 ${STAGE_MARK_CLASSES[quest.stage]}`}
+                  />
+                </div>
+                <div className="flex flex-col items-center gap-0.5 px-16 text-center">
+                  <span className="text-xs font-medium text-muted">
+                    {ko.board.drawer.dungeonView}
+                  </span>
+                  <p className="text-sm font-semibold text-ink">
+                    {ko.board.drawer.dungeonComingSoon}
+                  </p>
+                </div>
                 <div className="absolute right-3 top-3">
                   <AdventurerSprite
                     userId={quest.createdBy.id}
@@ -280,15 +294,15 @@ export function QuestDrawer({
               <div className="space-y-1.5">
                 <label
                   htmlFor={titleInputId}
-                  className="block text-xs font-bold uppercase tracking-wide text-slate-400"
+                  className="block text-sm font-medium text-muted"
                 >
                   {ko.quest.titleLabel}
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-xs font-bold text-slate-500">
+                  <span className="shrink-0 font-pixel text-xs text-muted">
                     #{quest.number}
                   </span>
-                  <input
+                  <TextInput
                     id={titleInputId}
                     type="text"
                     value={titleDraft}
@@ -306,37 +320,40 @@ export function QuestDrawer({
                     maxLength={200}
                     aria-label={ko.quest.titleLabel}
                     placeholder={ko.quest.titlePlaceholder}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm font-semibold text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500/70"
+                    className="font-semibold"
                   />
                 </div>
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <label
-                  htmlFor={`${titleInputId}-rank`}
-                  className="text-xs font-bold uppercase tracking-wide text-slate-400"
-                >
-                  {ko.quest.rank}
-                </label>
-                <select
-                  id={`${titleInputId}-rank`}
-                  value={quest.rank ?? ""}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    updateMutation.mutate({
-                      rank: value === "" ? null : (value as Rank),
-                    });
-                  }}
-                  aria-label={ko.quest.rank}
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-emerald-500/70"
-                >
-                  <option value="">{ko.quest.rankNone}</option>
-                  {RANKS.map((rank) => (
-                    <option key={rank} value={rank}>
-                      {ko.quest.ranks[rank]}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor={`${titleInputId}-rank`}
+                    className="text-sm font-medium text-muted"
+                  >
+                    {ko.quest.rank}
+                  </label>
+                  <select
+                    id={`${titleInputId}-rank`}
+                    value={quest.rank ?? ""}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      updateMutation.mutate({
+                        rank: value === "" ? null : (value as Rank),
+                      });
+                    }}
+                    aria-label={ko.quest.rank}
+                    className="h-8 rounded-sm border-[1.5px] border-line-strong bg-paper px-2 text-sm text-ink"
+                  >
+                    <option value="">{ko.quest.rankNone}</option>
+                    {RANKS.map((rank) => (
+                      <option key={rank} value={rank}>
+                        {ko.quest.ranks[rank]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <RankBadge rank={quest.rank} size={64} />
               </div>
 
               <TagEditor
@@ -384,10 +401,10 @@ export function QuestDrawer({
         </div>
 
         {quest ? (
-          <footer className="flex items-center justify-between gap-2 border-t border-slate-800 px-4 py-3">
-            <div className="min-w-0 text-[11px] text-slate-500">
+          <footer className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
+            <div className="min-w-0 text-xs text-muted">
               {updateMutation.isError ? (
-                <p role="alert" className="text-rose-300">
+                <p role="alert" className="text-brick">
                   {ko.quest.updateFailed}
                 </p>
               ) : updateMutation.isPending ? (
@@ -398,23 +415,24 @@ export function QuestDrawer({
                 </p>
               )}
             </div>
-            <button
-              type="button"
+            <Button
+              variant="danger"
+              icon="dropped"
               onClick={() => {
                 archiveMutation.reset();
                 setConfirmArchive(true);
               }}
-              className="shrink-0 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10"
+              className="shrink-0"
             >
               {ko.board.drawer.archive}
-            </button>
+            </Button>
           </footer>
         ) : null}
       </aside>
 
       {confirmArchive ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
           data-archive-confirm="true"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
@@ -426,37 +444,35 @@ export function QuestDrawer({
             role="dialog"
             aria-modal="true"
             aria-label={ko.board.drawer.archive}
-            className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl"
+            className="w-full max-w-sm rounded-sm border-[1.5px] border-line-strong bg-paper p-5 shadow-hard"
           >
-            <p className="text-sm font-semibold text-slate-100">
+            <p className="text-sm font-semibold text-ink">
               {ko.board.drawer.archiveConfirm}
             </p>
 
             {archiveMutation.isError ? (
-              <p role="alert" className="mt-2 text-xs text-rose-300">
+              <p role="alert" className="mt-2 text-xs text-brick">
                 {ko.board.drawer.archiveFailed}
               </p>
             ) : null}
 
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={() => setConfirmArchive(false)}
                 disabled={archiveMutation.isPending}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
               >
                 {ko.common.cancel}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => archiveMutation.mutate()}
                 disabled={archiveMutation.isPending}
-                className="rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {archiveMutation.isPending
                   ? ko.common.saving
                   : ko.board.drawer.archive}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

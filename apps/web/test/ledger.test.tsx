@@ -1,7 +1,9 @@
 // @vitest-environment node
 /**
- * Ledger table tests: the eight exact columns, text/tag filtering, client-side
- * header sorting and opening the shared quest drawer from a row.
+ * Ledger table tests: the eight exact columns, the design-system table surface
+ * (sunken header, line separators), stage/rank/avatar cells, text/tag/search
+ * filtering, client-side header sorting and opening the shared quest drawer
+ * from a row.
  *
  * As in the other DOM tests, jsdom is installed manually because Vitest cannot
  * resolve the workspace-local copy from the hoisted runner.
@@ -291,6 +293,109 @@ describe("LedgerPage", () => {
     expect(
       screen.getAllByText(formatKoreanDate(QUESTS[0]!.createdAt)).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("uses a sunken header, 1px line separators and sunken row hover", async () => {
+    stubFetch(defaultHandler());
+    const { container } = renderLedger();
+
+    await screen.findByText("Alpha");
+
+    expect(container.querySelector("thead")).toHaveClass("bg-sunken");
+    // The table is not a rounded card: depth comes from the sunken header.
+    const largeRadii = Array.from(container.querySelectorAll("*")).flatMap(
+      (element) =>
+        Array.from(element.classList).filter(
+          (name) => name.startsWith("rounded-") && name !== "rounded-sm",
+        ),
+    );
+    expect(largeRadii).toEqual([]);
+
+    const rows = Array.from(
+      container.querySelectorAll("tbody tr[data-quest-id]"),
+    );
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row).toHaveClass("border-b", "border-line", "hover:bg-sunken");
+    }
+  });
+
+  it("shows stage icons, rank badges and square author avatars", async () => {
+    stubFetch(defaultHandler());
+    const { container } = renderLedger();
+
+    await screen.findByText("Alpha");
+
+    const row = container.querySelector<HTMLTableRowElement>(
+      'tbody tr[data-quest-id="1"]',
+    );
+    expect(row).not.toBeNull();
+    const cells = row!.querySelectorAll<HTMLTableCellElement>("td");
+    expect(cells).toHaveLength(8);
+
+    const stageCell = cells[3]!;
+    expect(stageCell.querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("board.png"),
+    );
+    expect(stageCell).toHaveTextContent(ko.quest.stages.board);
+
+    const rankCell = cells[4]!;
+    const rank = rankCell.querySelector("[data-rank]");
+    expect(rank).toHaveAttribute("data-rank", "C");
+    expect(rank?.querySelector("img")).toHaveAttribute(
+      "src",
+      expect.stringContaining("rank-c.png"),
+    );
+
+    const authorCell = cells[5]!;
+    const avatar = authorCell.querySelector("[data-user-id='1']");
+    expect(avatar).toBeInTheDocument();
+    expect(avatar?.className).toContain("rounded-sm");
+    expect(avatar?.className).toContain("h-8");
+    expect(avatar?.className).toContain("w-8");
+  });
+
+  it("marks the active sort column with an ascending or descending icon", async () => {
+    stubFetch(defaultHandler());
+    const { user } = renderLedger();
+
+    await screen.findByText("Alpha");
+
+    const createdAtHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.createdAt),
+    });
+    const titleHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.title),
+    });
+    expect(createdAtHeader.querySelector("img")).toBeNull();
+    expect(titleHeader.querySelector("img")).toBeNull();
+
+    await user.click(createdAtHeader);
+    await waitFor(() =>
+      expect(createdAtHeader.querySelector("img")).toHaveAttribute(
+        "src",
+        expect.stringContaining("sort-ascending.png"),
+      ),
+    );
+    expect(titleHeader.querySelector("img")).toBeNull();
+
+    await user.click(createdAtHeader);
+    await waitFor(() =>
+      expect(createdAtHeader.querySelector("img")).toHaveAttribute(
+        "src",
+        expect.stringContaining("sort-descending.png"),
+      ),
+    );
+
+    await user.click(titleHeader);
+    await waitFor(() =>
+      expect(titleHeader.querySelector("img")).toHaveAttribute(
+        "src",
+        expect.stringContaining("sort-ascending.png"),
+      ),
+    );
+    expect(createdAtHeader.querySelector("img")).toBeNull();
   });
 
   it("filters by tag and sends the tag to the list endpoint", async () => {

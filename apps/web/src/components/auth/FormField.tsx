@@ -2,10 +2,16 @@
  * Labeled text input with optional hint and inline error copy.
  *
  * Every auth/settings form uses this so labels, descriptions and `aria-invalid`
- * wiring stay consistent (and tests can rely on `getByLabelText`).
+ * wiring stay consistent (and tests can rely on `getByLabelText`). The input is
+ * the shared `TextInput` atom; an optional pack icon (for example `key` on
+ * password fields) sits inside the field at its native 32px size.
  */
 import { useId } from "react";
 import type { InputHTMLAttributes } from "react";
+
+import type { IconName } from "../../lib/icons";
+import Icon from "../Icon";
+import { TextInput } from "../ui";
 
 export interface FormFieldProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
@@ -17,6 +23,8 @@ export interface FormFieldProps
   hint?: string;
   /** Korean validation message for this field. */
   error?: string | null;
+  /** Optional decorative icon shown inside the field. */
+  icon?: IconName;
 }
 
 /** Text input with a label, hint and validation error. */
@@ -25,6 +33,8 @@ export function FormField({
   label,
   hint,
   error,
+  icon,
+  className,
   ...inputProps
 }: FormFieldProps) {
   const generatedId = useId();
@@ -35,28 +45,38 @@ export function FormField({
     [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") ||
     undefined;
 
+  const inputClasses = [icon ? "pl-11" : "", className ?? ""]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div className="space-y-1.5">
-      <label
-        htmlFor={inputId}
-        className="block text-xs font-medium text-slate-300"
-      >
+      <label htmlFor={inputId} className="block text-xs font-medium text-ink">
         {label}
       </label>
-      <input
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        {...inputProps}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500/70"
-      />
+      <div className="relative">
+        {icon ? (
+          <Icon
+            name={icon}
+            size={32}
+            className="pointer-events-none absolute left-2 top-0.5"
+          />
+        ) : null}
+        <TextInput
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          {...inputProps}
+          className={inputClasses || undefined}
+        />
+      </div>
       {hint ? (
-        <p id={hintId} className="text-[11px] leading-4 text-slate-500">
+        <p id={hintId} className="text-xs leading-4 text-muted">
           {hint}
         </p>
       ) : null}
       {error ? (
-        <p id={errorId} className="text-xs text-rose-300">
+        <p id={errorId} className="text-xs text-brick">
           {error}
         </p>
       ) : null}

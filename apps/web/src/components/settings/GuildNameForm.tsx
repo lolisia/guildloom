@@ -17,6 +17,7 @@ import { apiErrorMessage } from "../auth/apiErrorMessage";
 import FormAlert from "../auth/FormAlert";
 import FormField from "../auth/FormField";
 import { validateGuildName } from "../auth/validation";
+import { Button, Panel } from "../ui";
 
 export interface GuildNameFormProps {
   projectId: number;
@@ -91,22 +92,22 @@ export function GuildNameForm({
 
   if (!isOwner) {
     return (
-      <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
-        <h2 className="text-sm font-bold text-slate-200">
+      <Panel className="space-y-2">
+        <h2 className="text-sm font-semibold text-ink">
           {ko.settings.guildName}
         </h2>
         <p
           data-testid="guild-name"
-          className="mt-2 text-lg font-semibold text-slate-100"
+          className="text-lg font-semibold text-ink"
         >
           {projectName}
         </p>
-      </section>
+      </Panel>
     );
   }
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+    <Panel>
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <FormField
           id="guild-settings-name"
@@ -129,23 +130,24 @@ export function GuildNameForm({
         />
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            icon="save"
             disabled={renameMutation.isPending || name.trim() === ""}
-            className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {renameMutation.isPending
               ? ko.settings.saving
               : ko.settings.saveGuildName}
-          </button>
+          </Button>
           {renameMutation.isSuccess ? (
-            <p role="status" className="text-xs text-emerald-300">
+            <p role="status" className="text-xs text-teal">
               {ko.settings.saved}
             </p>
           ) : null}
         </div>
       </form>
-    </section>
+    </Panel>
   );
 }
 
