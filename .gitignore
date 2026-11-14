@@ -11,3 +11,15 @@ AGENTS.md
 opencode.json
 opencode.jsonc
 .worktrees/
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+data/
+
+# Local SQLite databases
+*.db
+*.db-wal
+*.db-shm
+*.db-journal

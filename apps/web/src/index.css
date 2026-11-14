@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    "Pretendard Variable", Pretendard, "Noto Sans KR", ui-sans-serif,
+    system-ui, sans-serif;
+  --color-guild-bg: #070b14;
+  --color-guild-panel: #0d1526;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-guild-bg);
+  color: #e2e8f0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgb(16 185 129 / 35%);
+}
+
+/* Thin, dark scrollbars so the board columns do not glare on Windows. */
+* {
+  scrollbar-color: #334155 transparent;
+  scrollbar-width: thin;
+}

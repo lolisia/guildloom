@@ -1,0 +1,26 @@
+{
+  "name": "guildloom",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "guildloom - a game-flavored issue board for small teams",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "pretypecheck": "npm run build -w @guildloom/shared",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "pretest": "npm run build -w @guildloom/shared",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build -w @guildloom/shared && npm run build -w @guildloom/server && npm run build -w @guildloom/web",
+    "dev": "npm run build -w @guildloom/shared && concurrently -k -n server,web \"npm run dev -w @guildloom/server\" \"npm run dev -w @guildloom/web\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7",
+    "typescript": "^5.9.3"
+  }
+}

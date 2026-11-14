@@ -1,0 +1,310 @@
+/**
+ * Zod contracts for the guildloom HTTP API.
+ *
+ * Every request body and response body used by `apps/server` and `apps/web`
+ * lives here, together with the inferred TypeScript types (named without the
+ * `Schema` suffix).
+ */
+import { z } from "zod";
+
+import { RANKS, STAGES } from "./constants.js";
+
+/** Numeric primary key (SQLite autoincrement). */
+export const idSchema = z.number().int();
+
+/** Timestamp in epoch milliseconds. */
+export const timestampSchema = z.number().int();
+
+/** Quest stage enum. */
+export const stageSchema = z.enum(STAGES);
+
+/** Quest rank enum. */
+export const rankSchema = z.enum(RANKS);
+
+/** `{ id, displayName }` reference used for creators and actors. */
+export const userRefSchema = z.object({
+  id: idSchema,
+  displayName: z.string(),
+});
+export type UserRef = z.infer<typeof userRefSchema>;
+
+/** Login id: 3-32 lowercase letters, digits, dots, underscores or hyphens. */
+export const loginIdSchema = z
+  .string()
+  .min(3)
+  .max(32)
+  .regex(/^[a-z0-9._-]+$/);
+
+/** Password: at least 8 characters. */
+export const passwordSchema = z.string().min(8);
+
+/** Display name: trimmed, 1-20 characters. */
+export const displayNameSchema = z.string().trim().min(1).max(20);
+
+/** Guild (project) name: trimmed, 1-40 characters. */
+export const guildNameSchema = z.string().trim().min(1).max(40);
+
+/** Standard error body: `{ error: { code, message } }`. */
+export const apiErrorSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+  }),
+});
+export type ApiErrorBody = z.infer<typeof apiErrorSchema>;
+
+/** Membership role within a project. */
+export const projectRoleSchema = z.enum(["owner", "member"]);
+export type ProjectRole = z.infer<typeof projectRoleSchema>;
+
+/** Authenticated user profile. */
+export const userProfileSchema = z.object({
+  id: idSchema,
+  loginId: z.string(),
+  displayName: z.string(),
+  xp: z.number().int(),
+  level: z.number().int(),
+});
+export type UserProfile = z.infer<typeof userProfileSchema>;
+
+/** A project (guild). */
+export const projectSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  createdAt: timestampSchema,
+});
+export type Project = z.infer<typeof projectSchema>;
+
+/** A project as listed for the current user. */
+export const projectSummarySchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  role: projectRoleSchema,
+});
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
+
+/** `GET /api/projects` response. */
+export const projectListResponseSchema = z.array(projectSummarySchema);
+export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
+
+/** `POST /api/projects` request. */
+export const createProjectRequestSchema = z.object({
+  name: guildNameSchema,
+});
+export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
+
+/** `PATCH /api/projects/:pid` request. */
+export const updateProjectRequestSchema = z.object({
+  name: guildNameSchema,
+});
+export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
+
+/** A project member with their adventurer stats. */
+export const projectMemberSchema = z.object({
+  userId: idSchema,
+  displayName: z.string(),
+  role: projectRoleSchema,
+  xp: z.number().int(),
+  level: z.number().int(),
+});
+export type ProjectMember = z.infer<typeof projectMemberSchema>;
+
+/** `GET /api/projects/:pid` response. */
+export const projectDetailResponseSchema = z.object({
+  project: projectSchema,
+  members: z.array(projectMemberSchema),
+});
+export type ProjectDetailResponse = z.infer<
+  typeof projectDetailResponseSchema
+>;
+
+/** `GET /api/setup/status` response. */
+export const setupStatusResponseSchema = z.object({
+  needsSetup: z.boolean(),
+});
+export type SetupStatusResponse = z.infer<typeof setupStatusResponseSchema>;
+
+/** `POST /api/setup` request (first-run guild creation). */
+export const setupRequestSchema = z.object({
+  guildName: guildNameSchema,
+  displayName: displayNameSchema,
+  loginId: loginIdSchema,
+  password: passwordSchema,
+});
+export type SetupRequest = z.infer<typeof setupRequestSchema>;
+
+/** `POST /api/setup` response. */
+export const setupResponseSchema = z.object({
+  user: userProfileSchema,
+  project: projectSchema,
+});
+export type SetupResponse = z.infer<typeof setupResponseSchema>;
+
+/** `POST /api/auth/login` request. */
+export const loginRequestSchema = z.object({
+  loginId: loginIdSchema,
+  password: passwordSchema,
+});
+export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+/** `POST /api/auth/login` response. */
+export const loginResponseSchema = z.object({
+  user: userProfileSchema,
+});
+export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+/** `GET /api/auth/me` response. */
+export const meResponseSchema = z.object({
+  user: userProfileSchema,
+});
+export type MeResponse = z.infer<typeof meResponseSchema>;
+
+/** A project invite link. */
+export const inviteSchema = z.object({
+  id: idSchema,
+  code: z.string(),
+  url: z.string(),
+  createdBy: userRefSchema,
+  createdAt: timestampSchema,
+  revokedAt: timestampSchema.nullable(),
+});
+export type Invite = z.infer<typeof inviteSchema>;
+
+/** `GET /api/projects/:pid/invites` response. */
+export const inviteListResponseSchema = z.array(inviteSchema);
+export type InviteListResponse = z.infer<typeof inviteListResponseSchema>;
+
+/** `POST /api/projects/:pid/invites` response. */
+export const createInviteResponseSchema = z.object({
+  code: z.string(),
+  url: z.string(),
+});
+export type CreateInviteResponse = z.infer<
+  typeof createInviteResponseSchema
+>;
+
+/** `GET /api/invites/:code` response. */
+export const inviteInfoResponseSchema = z.object({
+  projectName: z.string(),
+  valid: z.boolean(),
+});
+export type InviteInfoResponse = z.infer<typeof inviteInfoResponseSchema>;
+
+/** `POST /api/invites/:code/signup` request. */
+export const inviteSignupRequestSchema = z.object({
+  displayName: displayNameSchema,
+  loginId: loginIdSchema,
+  password: passwordSchema,
+});
+export type InviteSignupRequest = z.infer<
+  typeof inviteSignupRequestSchema
+>;
+
+/** `POST /api/invites/:code/signup` response. */
+export const inviteSignupResponseSchema = z.object({
+  user: userProfileSchema,
+  projectId: idSchema,
+});
+export type InviteSignupResponse = z.infer<
+  typeof inviteSignupResponseSchema
+>;
+
+/** `POST /api/invites/:code/join` response. */
+export const inviteJoinResponseSchema = z.object({
+  projectId: idSchema,
+});
+export type InviteJoinResponse = z.infer<typeof inviteJoinResponseSchema>;
+
+/** Tag with its usage count, used by autocomplete. */
+export const tagSummarySchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  count: z.number().int(),
+});
+export type TagSummary = z.infer<typeof tagSummarySchema>;
+
+/** `GET /api/projects/:pid/tags` response. */
+export const tagListResponseSchema = z.array(tagSummarySchema);
+export type TagListResponse = z.infer<typeof tagListResponseSchema>;
+
+/** Quest card data returned by list endpoints. */
+export const questSummarySchema = z.object({
+  id: idSchema,
+  number: z.number().int(),
+  title: z.string(),
+  stage: stageSchema,
+  rank: rankSchema.nullable(),
+  orderKey: z.string(),
+  tags: z.array(z.string()),
+  createdBy: userRefSchema,
+  createdAt: timestampSchema,
+  updatedAt: timestampSchema,
+});
+export type QuestSummary = z.infer<typeof questSummarySchema>;
+
+/** Full quest data returned by detail endpoints. */
+export const questSchema = questSummarySchema.extend({
+  projectId: idSchema,
+  situation: z.string(),
+  direction: z.string(),
+  archiveReason: z.string().nullable(),
+});
+export type Quest = z.infer<typeof questSchema>;
+
+/** `GET /api/projects/:pid/quests` response. */
+export const questListResponseSchema = z.array(questSummarySchema);
+export type QuestListResponse = z.infer<typeof questListResponseSchema>;
+
+/** `POST /api/projects/:pid/quests` request. */
+export const createQuestRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  situation: z.string().max(20_000).optional(),
+  direction: z.string().max(20_000).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
+  rank: rankSchema.nullable().optional(),
+});
+export type CreateQuestRequest = z.infer<typeof createQuestRequestSchema>;
+
+/** `POST /api/projects/:pid/quests/bulk` request. */
+export const bulkCreateQuestsRequestSchema = z.object({
+  // Blank/whitespace-only lines are allowed through the schema; the server
+  // removes them before creating quests.
+  titles: z.array(z.string().max(200)).min(1).max(100),
+});
+export type BulkCreateQuestsRequest = z.infer<
+  typeof bulkCreateQuestsRequestSchema
+>;
+
+/** `PATCH /api/quests/:id` request. */
+export const updateQuestRequestSchema = createQuestRequestSchema.partial();
+export type UpdateQuestRequest = z.infer<typeof updateQuestRequestSchema>;
+
+/** `POST /api/quests/:id/move` request. */
+export const moveQuestRequestSchema = z.object({
+  stage: stageSchema,
+  beforeId: idSchema.optional(),
+  afterId: idSchema.optional(),
+});
+export type MoveQuestRequest = z.infer<typeof moveQuestRequestSchema>;
+
+/** `POST /api/quests/:id/archive` request. */
+export const archiveQuestRequestSchema = z.object({
+  reason: z.literal("dropped").optional(),
+});
+export type ArchiveQuestRequest = z.infer<typeof archiveQuestRequestSchema>;
+
+/** `GET /api/projects/:pid/quests` query. `stage` is a comma-separated list. */
+export const listQuestsQuerySchema = z.object({
+  stage: z.string().optional(),
+  tag: z.string().optional(),
+  q: z.string().optional(),
+});
+export type ListQuestsQuery = z.infer<typeof listQuestsQuerySchema>;
+
+/** `GET /api/projects/:pid/tags` query. */
+export const tagAutocompleteQuerySchema = z.object({
+  q: z.string().optional(),
+});
+export type TagAutocompleteQuery = z.infer<
+  typeof tagAutocompleteQuerySchema
+>;
