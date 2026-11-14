@@ -335,7 +335,12 @@ describe("GuildSettingsPage", () => {
     );
 
     const created = await screen.findByTestId("created-invite");
-    expect(within(created).getByText("freshcode")).toBeInTheDocument();
+    const createdCode = within(created).getByText("freshcode");
+    expect(createdCode).toBeInTheDocument();
+    // DESIGN.md allows the pixel font only at 12px, 16px and 22px. The created
+    // code is the prominent value, so it uses the 16px pixel step (not text-sm).
+    expect(createdCode).toHaveClass("font-pixel", "text-[16px]");
+    expect(createdCode.className).not.toContain("text-sm");
     expect(
       within(created).getByText("http://localhost/invite/freshcode"),
     ).toBeInTheDocument();

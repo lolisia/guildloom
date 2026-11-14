@@ -120,7 +120,7 @@ export function InviteSection({ projectId }: InviteSectionProps) {
             <p className="text-xs font-medium text-teal">
               {ko.settings.inviteUrl}
             </p>
-            <p className="mt-1 font-pixel text-sm font-bold text-ink">
+            <p className="mt-1 font-pixel text-[16px] font-bold text-ink">
               {created.code}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
