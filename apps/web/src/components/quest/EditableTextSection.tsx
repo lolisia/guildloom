@@ -1,14 +1,15 @@
 /**
  * Long-text section used by the quest drawer for "현재 상황" and "수정 방향".
  *
- * Stored text is shown read-only with `whitespace-pre-wrap` and clickable
- * `http(s)` URLs. The edit button swaps in a textarea that saves on blur (or
- * `Escape` cancels the edit).
+ * Stored text is shown read-only on a sunken surface with `whitespace-pre-wrap`
+ * and clickable `http(s)` URLs. The ghost edit button swaps in the shared
+ * `TextArea`, which saves on blur (`Escape` cancels the edit).
  */
 import { useRef, useState } from "react";
 
 import { ko } from "../../i18n/ko";
 import { tokenizeLinks } from "../../lib/format";
+import { Button, TextArea } from "../ui";
 
 /** Props for {@link EditableTextSection}. */
 export interface EditableTextSectionProps {
@@ -33,7 +34,7 @@ function LinkifiedText({ text }: { text: string }) {
             href={token.value}
             target="_blank"
             rel="noreferrer noopener"
-            className="break-all text-emerald-300 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-200"
+            className="break-all text-teal underline underline-offset-2 hover:text-ink"
           >
             {token.value}
           </a>
@@ -90,24 +91,22 @@ export function EditableTextSection({
       className="space-y-1.5"
     >
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
-          {label}
-        </h3>
+        <h3 className="text-sm font-medium text-muted">{label}</h3>
         {!editing ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={startEditing}
             disabled={disabled}
             aria-label={`${label} ${ko.common.edit}`}
-            className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50"
           >
             {ko.common.edit}
-          </button>
+          </Button>
         ) : null}
       </div>
 
       {editing ? (
-        <textarea
+        <TextArea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
@@ -123,14 +122,13 @@ export function EditableTextSection({
           aria-label={label}
           rows={4}
           autoFocus
-          className="w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm leading-relaxed text-slate-100 outline-none placeholder:text-slate-600 focus:border-emerald-500/70"
         />
       ) : value.trim().length > 0 ? (
-        <div className="whitespace-pre-wrap break-words rounded-lg bg-slate-950/60 px-2.5 py-2 text-sm leading-relaxed text-slate-200">
+        <div className="whitespace-pre-wrap break-words rounded-sm border border-line bg-sunken px-2.5 py-2 text-sm leading-relaxed text-ink">
           <LinkifiedText text={value} />
         </div>
       ) : (
-        <p className="rounded-lg bg-slate-950/40 px-2.5 py-2 text-xs text-slate-500">
+        <p className="rounded-sm border border-line bg-sunken px-2.5 py-2 text-xs text-muted">
           {emptyText}
         </p>
       )}
