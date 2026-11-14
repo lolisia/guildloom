@@ -8,9 +8,10 @@
  * `data-state` so styling/tests do not depend on the render shape.
  *
  * Shape follows DESIGN.md: 2px corners (never a circle), a 1.5px `line-strong`
- * outline, paper-coloured initial and no shadow. Backgrounds come from the
- * mid-tones of the JRPG icon palette so avatars sit in the same world as the
- * quest icons.
+ * outline, a light initial and no shadow. Backgrounds come from the mid-tones
+ * of the JRPG icon palette so avatars sit in the same world as the quest icons;
+ * each one is checked against the initial colour for WCAG AA (4.5:1) in both
+ * themes by `test/sprite.test.tsx`.
  */
 import type { AdventurerState } from "@guildloom/shared";
 
@@ -34,10 +35,22 @@ const SIZE_CLASSES: Record<AdventurerSpriteSize, string> = {
 };
 
 /**
- * Mid-tones from the `jrpg-v1` palette. Dark enough for a paper-coloured
- * initial and flat enough to read as ink on the light theme.
+ * Initial colour for every avatar, independent of the active theme.
+ *
+ * This is the light-theme paper value, mirrored as `--color-avatar-ink` in
+ * `index.css` (never overridden under `[data-theme="dark"]`). Reusing
+ * `--color-paper` would render the initial `#23232F` in dark mode, which drops
+ * most palette mid-tones to 1.2–3.5:1. Keeping the light value in both themes
+ * lets every palette entry clear WCAG AA (4.5:1).
  */
-const AVATAR_COLORS = [
+export const AVATAR_INITIAL_COLOR = "#FAFAF6";
+
+/**
+ * Mid-tones from the `jrpg-v1` palette. Every entry is dark enough for the
+ * theme-independent {@link AVATAR_INITIAL_COLOR} initial (≥ 4.5:1); `test/
+ * sprite.test.tsx` fails if a colour is added or lightened below that bar.
+ */
+export const AVATAR_COLORS = [
   "#20585b",
   "#793d35",
   "#614a28",
@@ -47,9 +60,9 @@ const AVATAR_COLORS = [
   "#287b79",
   "#806046",
   "#a65343",
-  "#99702d",
+  "#8a6426",
   "#56768e",
-  "#3b9d91",
+  "#2d786e",
 ] as const;
 
 /** FNV-1a hash; deterministic across browsers and Node. */
@@ -86,7 +99,7 @@ export function AdventurerSprite({
 
   return (
     <span
-      className={`inline-flex shrink-0 select-none items-center justify-center rounded-sm border-[1.5px] border-line-strong font-bold leading-none text-paper ${SIZE_CLASSES[size]}`}
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-sm border-[1.5px] border-line-strong font-bold leading-none text-avatar-ink ${SIZE_CLASSES[size]}`}
       style={{ backgroundColor: avatarColorForUserId(userId) }}
       data-user-id={userId}
       data-state={state}

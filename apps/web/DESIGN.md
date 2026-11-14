@@ -14,6 +14,7 @@ colors:
     gold: "#7A5716"       # 보상 전용 텍스트: XP, 현상금, 레벨 (paper 6.27:1)
     gold-fill: "#CE9C3C"  # 보상 막대 채움 (XP 바, 레벨업)
     brick: "#793D35"      # 보스전, 위험, 삭제 (paper 7.93:1)
+    avatar-ink: "#FAFAF6" # 아바타 이니셜 전용 — 테마와 무관하게 고정 (모든 아바타 바탕색과 4.5:1 이상)
   dark:
     ground: "#191923"
     paper: "#23232F"
@@ -25,6 +26,7 @@ colors:
     gold: "#EFC45E"
     gold-fill: "#CE9C3C"
     brick: "#E69B72"
+    # avatar-ink는 덮어쓰지 않는다 — 이니셜은 두 테마 모두 #FAFAF6.
 typography:
   pixel:
     fontFamily: Galmuri11
@@ -55,6 +57,7 @@ border:
 - teal: 링크, `:focus-visible` 링(2px solid teal, offset 2px), 정보 알림. 버튼 바탕으로 쓰지 않는다.
 - gold: XP, 현상금, 레벨 텍스트와 XP 바에만 쓴다. 그 밖의 용도로 쓰지 않는다.
 - brick: 보스전 단계, 오류, 삭제·의뢰 내리기 같은 파괴적 행동.
+- avatar-ink: 아바타 이니셜 전용 `#FAFAF6`. 테마와 무관하게 고정하며(다크에서 `--color-paper`는 `#23232F`이므로 재사용 금지), 아래 아바타 바탕 팔레트의 모든 색과 4.5:1 이상을 유지한다.
 - 단계 색: board=ink, dungeon=teal, boss=brick, cleared=gold. 컬럼 제목 아이콘 옆 2px 밑줄과 드로어의 단계 표시에만 쓴다.
 
 ## Typography
@@ -85,7 +88,7 @@ border:
   - 높이 32px, 패딩 0 12px, 500
   - 아이콘이 붙으면 32px 아이콘을 왼쪽에 두고 gap은 6px. 작은 버튼에서는 아이콘을 생략한다.
 - 입력창: paper, 1.5px ink(라이트) / line-strong(다크), focus 시 teal 링
-- 아바타: 사각형 24/32px, 이름 해시 색 바탕(아이콘 팔레트의 중간 톤에서 선택), paper 글자, 1.5px ink 외곽선
+- 아바타: 사각형 24/32px, 이름 해시 색 바탕(아이콘 팔레트의 중간 톤에서 선택), avatar-ink 글자, 1.5px ink 외곽선. 바탕 팔레트는 어둡게 조정해 모든 색이 avatar-ink와 4.5:1 이상이 되도록 유지한다.
 - 태그 칩: 1px line, 12px, muted. 칩 안은 공간이 작아서 아이콘을 넣지 않는다 (아이콘은 32px 정수배 규칙). 삭제 버튼은 텍스트 "×"와 `aria-label="태그 삭제: 이름"`으로 만든다.
 - 빈 상태: `empty` 아이콘 64px + 한 줄 안내 + 행동 버튼
 

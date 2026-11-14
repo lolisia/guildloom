@@ -14,12 +14,82 @@
  * before loading React Testing Library, which keeps the test hermetic (no
  * server, no network) and exercises the real DOM implementation.
  */
+import { readFileSync } from "node:fs";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import AdventurerSprite, {
+  AVATAR_COLORS,
+  AVATAR_INITIAL_COLOR,
   avatarColorForUserId,
   avatarInitial,
 } from "../src/components/AdventurerSprite";
+
+/**
+ * WCAG 2.1 relative luminance of an sRGB channel.
+ * https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
+ */
+function channelLuminance(channel: number): number {
+  const srgb = channel / 255;
+  return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG 2.1 relative luminance of a `#rrggbb` colour. */
+function relativeLuminance(hex: string): number {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return (
+    0.2126 * channelLuminance((value >> 16) & 0xff) +
+    0.7152 * channelLuminance((value >> 8) & 0xff) +
+    0.0722 * channelLuminance(value & 0xff)
+  );
+}
+
+/** WCAG 2.1 contrast ratio between two `#rrggbb` colours (1–21). */
+function contrastRatio(a: string, b: string): number {
+  const first = relativeLuminance(a);
+  const second = relativeLuminance(b);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
+// The rendered initial colour lives in CSS, so the regression test reads the
+// real token sheet instead of trusting a copy of the values.
+const INDEX_CSS = readFileSync(
+  new URL("../src/index.css", import.meta.url),
+  "utf8",
+);
+
+function readCssBlock(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`);
+  return pattern.exec(INDEX_CSS)?.[1] ?? "";
+}
+
+function readCustomProperties(block: string): Map<string, string> {
+  const properties = new Map<string, string>();
+  for (const match of block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    const name = match[1];
+    const value = match[2];
+    if (name && value) {
+      properties.set(name, value.trim());
+    }
+  }
+  return properties;
+}
+
+const THEME_TOKENS = readCustomProperties(readCssBlock("@theme static"));
+const DARK_TOKENS = readCustomProperties(readCssBlock('[data-theme="dark"]'));
+
+/** Resolve a theme token; dark only overrides, so it falls back to the base. */
+function themeColor(theme: "light" | "dark", token: string): string {
+  const value =
+    theme === "dark"
+      ? (DARK_TOKENS.get(token) ?? THEME_TOKENS.get(token))
+      : THEME_TOKENS.get(token);
+  if (value === undefined) {
+    throw new Error(`index.css does not define ${token} for the ${theme} theme`);
+  }
+  return value.toLowerCase();
+}
 
 // jsdom 29 ships without type declarations and `@types/jsdom` is not part of
 // the M1 dependency set, so import it through an untyped expression (the
@@ -200,5 +270,52 @@ describe("AdventurerSprite", () => {
     expect(container.querySelector('[data-user-id="1"]')).toHaveTextContent(
       "?",
     );
+  });
+});
+
+describe("avatar initial contrast", () => {
+  it("pins the initial colour to the theme-independent light paper value", () => {
+    expect(AVATAR_INITIAL_COLOR.toLowerCase()).toBe("#fafaf6");
+    expect(themeColor("light", "--color-avatar-ink")).toBe(
+      AVATAR_INITIAL_COLOR.toLowerCase(),
+    );
+    expect(themeColor("dark", "--color-avatar-ink")).toBe(
+      AVATAR_INITIAL_COLOR.toLowerCase(),
+    );
+    // The dark theme must not swap the initial back to its paper (#23232F).
+    expect(DARK_TOKENS.has("--color-avatar-ink")).toBe(false);
+    expect(themeColor("light", "--color-paper")).toBe(
+      AVATAR_INITIAL_COLOR.toLowerCase(),
+    );
+    expect(themeColor("dark", "--color-paper")).not.toBe(
+      AVATAR_INITIAL_COLOR.toLowerCase(),
+    );
+  });
+
+  it("meets 4.5:1 for every exported palette colour in both themes", () => {
+    expect(AVATAR_COLORS.length).toBeGreaterThan(0);
+
+    for (const theme of ["light", "dark"] as const) {
+      const foreground = themeColor(theme, "--color-avatar-ink");
+      for (const background of AVATAR_COLORS) {
+        expect(background).toMatch(/^#[0-9a-f]{6}$/);
+        expect(
+          contrastRatio(background, foreground),
+          `${background} on ${foreground} (${theme} theme)`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("renders the initial with avatar-ink instead of text-paper", () => {
+    const { container } = render(
+      <AdventurerSprite userId={21} displayName="이니셜" />,
+    );
+    const sprite = container.querySelector(
+      '[data-user-id="21"]',
+    ) as HTMLElement;
+
+    expect(sprite.className).toContain("text-avatar-ink");
+    expect(sprite.className).not.toContain("text-paper");
   });
 });
