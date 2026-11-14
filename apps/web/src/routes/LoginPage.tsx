@@ -24,6 +24,7 @@ import {
   validatePassword,
 } from "../components/auth/validation";
 import { LAST_PROJECT_STORAGE_KEY } from "../components/AppLayout";
+import { Button } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
 
@@ -110,6 +111,7 @@ export default function LoginPage() {
 
   return (
     <AuthPanel
+      icon="login"
       title={ko.login.title}
       heading={ko.login.heading}
       description={ko.login.description}
@@ -139,18 +141,21 @@ export default function LoginPage() {
           placeholder={ko.login.passwordPlaceholder}
           autoComplete="current-password"
           required
+          icon="key"
           error={errors.password}
         />
 
         <FormAlert message={serverError} />
 
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          icon="login"
+          className="w-full"
           disabled={loginMutation.isPending}
-          className="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loginMutation.isPending ? ko.login.submitting : ko.login.submit}
-        </button>
+        </Button>
       </form>
     </AuthPanel>
   );

@@ -247,6 +247,32 @@ describe("SetupPage", () => {
     const view = renderAt("/setup");
     const invalidateSpy = vi.spyOn(view.queryClient, "invalidateQueries");
     await screen.findByLabelText(ko.setup.guildName);
+
+    // The auth surface is a ground page with a centered paper panel and the
+    // 64px guild icon; form controls use the shared atoms.
+    const headerIcon = view.container.querySelector('img[src$="/64/guild.png"]');
+    expect(headerIcon).not.toBeNull();
+    expect(headerIcon).toHaveAttribute("width", "64");
+    const panel = headerIcon?.closest("section");
+    expect(panel).toHaveClass(
+      "bg-paper",
+      "border-line-strong",
+      "rounded-sm",
+      "shadow-hard",
+    );
+    expect(panel?.parentElement).toHaveClass("bg-ground");
+    const submit = screen.getByRole("button", { name: ko.setup.submit });
+    expect(submit).toHaveAttribute("type", "submit");
+    expect(submit.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/guild.png",
+    );
+    expect(
+      screen
+        .getByLabelText(ko.setup.password)
+        .parentElement?.querySelector("img")
+        ?.getAttribute("src"),
+    ).toBe("/assets/icons/jrpg-v1/32/key.png");
+
     await fillSetupForm(view.user, { guildName: "  달빛 길드  " });
     await view.user.click(
       screen.getByRole("button", { name: ko.setup.submit }),
@@ -367,6 +393,27 @@ describe("LoginPage", () => {
     const view = renderAt("/login");
 
     await screen.findByLabelText(ko.login.loginId);
+
+    // Login uses the login icon in the header and on the submit button, and
+    // the password field carries the key icon.
+    const headerIcon = view.container.querySelector('img[src$="/64/login.png"]');
+    expect(headerIcon).toHaveAttribute("width", "64");
+    expect(headerIcon?.closest("section")).toHaveClass(
+      "bg-paper",
+      "shadow-hard",
+    );
+    const submit = screen.getByRole("button", { name: ko.login.submit });
+    expect(submit).toHaveAttribute("type", "submit");
+    expect(submit.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/login.png",
+    );
+    expect(
+      screen
+        .getByLabelText(ko.login.password)
+        .parentElement?.querySelector("img")
+        ?.getAttribute("src"),
+    ).toBe("/assets/icons/jrpg-v1/32/key.png");
+
     await view.user.type(screen.getByLabelText(ko.login.loginId), "hero");
     await view.user.type(
       screen.getByLabelText(ko.login.password),

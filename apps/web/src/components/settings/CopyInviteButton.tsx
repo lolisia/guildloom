@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { inviteAbsoluteUrl } from "../../api/invites";
 import { ko } from "../../i18n/ko";
+import { Button } from "../ui";
 
 export interface CopyInviteButtonProps {
   /** Relative invite route returned by the API. */
@@ -34,15 +35,15 @@ export function CopyInviteButton({ url }: CopyInviteButtonProps) {
 
   return (
     <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
+      <Button
+        variant="secondary"
+        icon="copy"
         onClick={() => void handleCopy()}
-        className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:border-emerald-500/60 hover:text-emerald-300"
       >
         {status === "copied" ? ko.settings.copied : ko.settings.copyInvite}
-      </button>
+      </Button>
       {status === "failed" ? (
-        <span role="alert" className="text-xs text-rose-300">
+        <span role="alert" className="text-xs text-brick">
           {ko.settings.copyFailed}
         </span>
       ) : null}

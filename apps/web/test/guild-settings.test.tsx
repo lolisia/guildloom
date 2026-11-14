@@ -273,9 +273,23 @@ describe("GuildSettingsPage", () => {
     });
     renderSettings();
 
+    const guildName = await screen.findByTestId("guild-name");
+    expect(guildName).toHaveTextContent("달빛 길드");
+    expect(guildName.closest("section")).toHaveClass(
+      "bg-paper",
+      "border-line-strong",
+      "rounded-sm",
+    );
     expect(
-      await screen.findByTestId("guild-name"),
-    ).toHaveTextContent("달빛 길드");
+      screen
+        .getByRole("heading", { name: ko.settings.members })
+        .closest("section"),
+    ).toHaveClass("bg-paper", "border-line-strong", "rounded-sm");
+    expect(
+      screen
+        .getByRole("heading", { name: ko.settings.invites })
+        .closest("section"),
+    ).toHaveClass("bg-paper", "border-line-strong", "rounded-sm");
     expect(screen.queryByLabelText(ko.settings.guildName)).toBeNull();
     expect(
       screen.queryByRole("button", { name: ko.settings.saveGuildName }),
@@ -326,6 +340,29 @@ describe("GuildSettingsPage", () => {
       within(created).getByText("http://localhost/invite/freshcode"),
     ).toBeInTheDocument();
 
+    const copyButton = within(created).getByRole("button", {
+      name: ko.settings.copyInvite,
+    });
+    expect(copyButton.className).toContain("bg-paper");
+    expect(copyButton.className).toContain("border-line-strong");
+
+    const row = screen.getByText("oldcode").closest("li");
+    expect(row?.querySelector('img[src$="/32/invite.png"]')).not.toBeNull();
+    const activeStatus = screen
+      .getByText(ko.settings.active)
+      .closest('[data-status="active"]');
+    expect(activeStatus?.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/success.png",
+    );
+    const revokeButton = screen.getByRole("button", {
+      name: ko.settings.revokeInvite,
+    });
+    expect(revokeButton.className).toContain("border-brick");
+    expect(revokeButton.className).toContain("text-brick");
+    expect(revokeButton.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/dropped.png",
+    );
+
     await user.click(
       within(created).getByRole("button", { name: ko.settings.copyInvite }),
     );
@@ -355,6 +392,12 @@ describe("GuildSettingsPage", () => {
       ).toBe(true);
     });
     expect(await screen.findByText(ko.settings.revoked)).toBeInTheDocument();
+    const revokedStatus = screen
+      .getByText(ko.settings.revoked)
+      .closest('[data-status="revoked"]');
+    expect(revokedStatus?.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/dropped.png",
+    );
   });
 
   it("does not revoke when the confirmation is dismissed", async () => {
@@ -409,6 +452,20 @@ describe("GuildSettingsPage", () => {
     expect(within(list).getByText("김모험")).toBeInTheDocument();
     expect(within(list).getByText(ko.settings.roleOwner)).toBeInTheDocument();
     expect(within(list).getByText(ko.settings.roleMember)).toBeInTheDocument();
+
+    const ownerRole = within(list)
+      .getByText(ko.settings.roleOwner)
+      .closest('[data-role="owner"]');
+    expect(ownerRole?.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/boss.png",
+    );
+    const memberRole = within(list)
+      .getByText(ko.settings.roleMember)
+      .closest('[data-role="member"]');
+    expect(memberRole?.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/adventurer.png",
+    );
+
     expect(within(list).getByText(ko.tabs.level(2))).toBeInTheDocument();
     expect(within(list).getByText(ko.tabs.level(1))).toBeInTheDocument();
     expect(

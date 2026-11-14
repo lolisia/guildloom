@@ -15,7 +15,7 @@ export function FormAlert({ message }: FormAlertProps) {
   return (
     <p
       role="alert"
-      className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200"
+      className="rounded-sm border-[1.5px] border-brick bg-paper px-3 py-2 text-xs text-brick"
     >
       {message}
     </p>

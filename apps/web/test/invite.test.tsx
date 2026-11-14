@@ -210,15 +210,36 @@ describe("InvitePage", () => {
       "GET /api/invites/abc123": VALID_INVITE,
       "GET /api/auth/me": ANONYMOUS_ME,
     });
-    renderInvite("abc123");
+    const view = renderInvite("abc123");
 
     expect(await screen.findByText(PROJECT_NAME)).toBeInTheDocument();
     expect(
       await screen.findByText(ko.invite.signupTitle),
     ).toBeInTheDocument();
+
+    // The invite screen has the 64px invite header, a paper panel and the
+    // invite/key icons on the signup controls.
+    const headerIcon = view.container.querySelector(
+      'img[src$="/64/invite.png"]',
+    );
+    expect(headerIcon).toHaveAttribute("width", "64");
+    expect(headerIcon?.closest("section")).toHaveClass(
+      "bg-paper",
+      "border-line-strong",
+      "shadow-hard",
+    );
+    const signup = screen.getByRole("button", { name: ko.invite.signup });
+    expect(signup).toHaveAttribute("type", "submit");
+    expect(signup.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/invite.png",
+    );
     expect(
-      screen.getByRole("button", { name: ko.invite.signup }),
-    ).toBeInTheDocument();
+      screen
+        .getByLabelText(ko.invite.password)
+        .parentElement?.querySelector("img")
+        ?.getAttribute("src"),
+    ).toBe("/assets/icons/jrpg-v1/32/key.png");
+
     expect(
       screen.queryByRole("button", { name: ko.invite.join }),
     ).toBeNull();
@@ -353,6 +374,10 @@ describe("InvitePage", () => {
     const joinButton = await screen.findByRole("button", {
       name: ko.invite.join,
     });
+    expect(joinButton).toHaveAttribute("type", "button");
+    expect(joinButton.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/login.png",
+    );
     expect(screen.queryByLabelText(ko.invite.password)).toBeNull();
 
     await view.user.click(joinButton);
