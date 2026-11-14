@@ -1,15 +1,52 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans:
-    "Pretendard Variable", Pretendard, "Noto Sans KR", ui-sans-serif,
-    system-ui, sans-serif;
-  --color-guild-bg: #070b14;
-  --color-guild-panel: #0d1526;
+/*
+ * guildloom design tokens (see DESIGN.md).
+ *
+ * Plain `@theme` (not `@theme inline`) keeps every token as a real CSS custom
+ * property, which is what lets `[data-theme='dark']` below swap the palette
+ * while utilities such as `bg-paper` and `text-ink` keep resolving through
+ * `var(--color-*)`. `static` emits the whole palette even before every token
+ * has a consumer, so design-system values are inspectable in the built CSS.
+ */
+@theme static {
+  --color-ground: #E8EBE4;
+  --color-paper: #FAFAF6;
+  --color-sunken: #DEE2DA;
+  --color-ink: #1F2429;
+  --color-muted: #545C64;
+  --color-line: #C3C9C0;
+  --color-line-strong: #1F2429;
+  --color-teal: #20585B;
+  --color-gold: #7A5716;
+  --color-gold-fill: #CE9C3C;
+  --color-brick: #793D35;
+
+  --font-body: "IBM Plex Sans KR", sans-serif;
+  --font-pixel: "Galmuri11", monospace;
+
+  --radius-sm: 2px;
+  --shadow-hard: 4px 4px 0 var(--color-ink);
 }
 
 :root {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
   color-scheme: dark;
+
+  --color-ground: #191923;
+  --color-paper: #23232F;
+  --color-sunken: #14141C;
+  --color-ink: #EDE3CF;
+  --color-muted: #A69F96;
+  --color-line: #3A3946;
+  --color-line-strong: #5C5866;
+  --color-teal: #75B5A1;
+  --color-gold: #EFC45E;
+  --color-gold-fill: #CE9C3C;
+  --color-brick: #E69B72;
 }
 
 html,
@@ -23,20 +60,25 @@ body,
 }
 
 body {
+  @apply bg-ground font-body text-ink;
   margin: 0;
-  background-color: var(--color-guild-bg);
-  color: #e2e8f0;
-  font-family: var(--font-sans);
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-::selection {
-  background-color: rgb(16 185 129 / 35%);
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
 }
 
-/* Thin, dark scrollbars so the board columns do not glare on Windows. */
+::selection {
+  background-color: var(--color-line);
+  color: var(--color-ink);
+}
+
+/* Thin scrollbars, tinted with the theme instead of OS defaults. */
 * {
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: var(--color-muted) transparent;
   scrollbar-width: thin;
 }

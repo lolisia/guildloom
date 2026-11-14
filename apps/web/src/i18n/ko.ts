@@ -335,6 +335,12 @@ export const ko = {
     leaveConfirm: "정말 길드를 떠날까요?",
     leaveFailed: "길드를 떠나지 못했습니다.",
   },
+  theme: {
+    label: "테마",
+    system: "시스템",
+    light: "라이트",
+    dark: "다크",
+  },
   errors: {
     generic: "문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
     network: "서버와 연결할 수 없습니다. 네트워크를 확인해 주세요.",

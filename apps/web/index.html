@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>guildloom</title>
+    <script>
+      /*
+       * Apply the theme before the module script runs so the first paint uses
+       * the right palette. Mirrors src/lib/theme.ts: localStorage "gl:theme"
+       * accepts only "light"/"dark"; anything else follows the OS and falls
+       * back to light. Keep this inline (no network, no build step).
+       */
+      (function () {
+        try {
+          var stored = window.localStorage.getItem("gl:theme");
+          var theme =
+            stored === "light" || stored === "dark"
+              ? stored
+              : window.matchMedia &&
+                  window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

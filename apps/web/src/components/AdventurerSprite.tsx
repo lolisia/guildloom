@@ -1,11 +1,16 @@
 /**
  * Placeholder adventurer avatar.
  *
- * M1 has no sprite sheet yet, so this renders a rounded square with the first
- * character of the display name over a deterministic, per-user colour. The
- * props interface is fixed: later tasks can swap the internals for a real
- * sprite sheet without touching call sites. Animation state is exposed only
- * through `data-state` so styling/tests do not depend on the render shape.
+ * M1 has no sprite sheet yet, so this renders a square with the first character
+ * of the display name over a deterministic, per-user colour. The props
+ * interface is fixed: later tasks can swap the internals for a real sprite
+ * sheet without touching call sites. Animation state is exposed only through
+ * `data-state` so styling/tests do not depend on the render shape.
+ *
+ * Shape follows DESIGN.md: 2px corners (never a circle), a 1.5px `line-strong`
+ * outline, paper-coloured initial and no shadow. Backgrounds come from the
+ * mid-tones of the JRPG icon palette so avatars sit in the same world as the
+ * quest icons.
  */
 import type { AdventurerState } from "@guildloom/shared";
 
@@ -28,20 +33,23 @@ const SIZE_CLASSES: Record<AdventurerSpriteSize, string> = {
   lg: "h-14 w-14 text-xl",
 };
 
-/** Palette intentionally readable against the dark guild UI. */
+/**
+ * Mid-tones from the `jrpg-v1` palette. Dark enough for a paper-coloured
+ * initial and flat enough to read as ink on the light theme.
+ */
 const AVATAR_COLORS = [
-  "#b45309",
-  "#a16207",
-  "#4d7c0f",
-  "#15803d",
-  "#0f766e",
-  "#0e7490",
-  "#1d4ed8",
-  "#6d28d9",
-  "#a21caf",
-  "#be123c",
-  "#b91c1c",
-  "#475569",
+  "#20585b",
+  "#793d35",
+  "#614a28",
+  "#35516b",
+  "#654365",
+  "#482d2b",
+  "#287b79",
+  "#806046",
+  "#a65343",
+  "#99702d",
+  "#56768e",
+  "#3b9d91",
 ] as const;
 
 /** FNV-1a hash; deterministic across browsers and Node. */
@@ -67,7 +75,7 @@ export function avatarInitial(displayName: string): string {
   return first ?? "?";
 }
 
-/** Rounded-square avatar placeholder for an adventurer. */
+/** Square avatar placeholder for an adventurer. */
 export function AdventurerSprite({
   userId,
   displayName,
@@ -78,7 +86,7 @@ export function AdventurerSprite({
 
   return (
     <span
-      className={`inline-flex shrink-0 select-none items-center justify-center rounded-md font-bold leading-none text-white shadow-inner ${SIZE_CLASSES[size]}`}
+      className={`inline-flex shrink-0 select-none items-center justify-center rounded-sm border-[1.5px] border-line-strong font-bold leading-none text-paper ${SIZE_CLASSES[size]}`}
       style={{ backgroundColor: avatarColorForUserId(userId) }}
       data-user-id={userId}
       data-state={state}
