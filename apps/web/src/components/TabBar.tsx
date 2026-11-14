@@ -7,13 +7,14 @@ import { levelFromXp, levelProgress } from "@guildloom/shared";
 import type { MeResponse, Project, ProjectSummary } from "@guildloom/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import type { FormEvent, MouseEvent } from "react";
+import type { FormEvent, KeyboardEvent, MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { fetchMe, logout } from "../api/auth";
 import { createProject, fetchProjects } from "../api/projects";
 import { ko } from "../i18n/ko";
+import { isImeComposing } from "../lib/ime";
 import { queryKeys } from "../lib/queryKeys";
 import AdventurerSprite from "./AdventurerSprite";
 
@@ -119,6 +120,15 @@ export function TabBar() {
       return;
     }
     createMutation.mutate(name);
+  };
+
+  // The dialog has a single text input, so an Enter that confirms an IME
+  // candidate would implicitly submit the form. Cancel only that Enter; a
+  // regular Enter still submits.
+  const handleGuildNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && isImeComposing(event)) {
+      event.preventDefault();
+    }
   };
 
   return (
@@ -310,6 +320,7 @@ export function TabBar() {
                       id={guildNameInputId}
                       value={guildName}
                       onChange={(event) => setGuildName(event.target.value)}
+                      onKeyDown={handleGuildNameKeyDown}
                       placeholder={ko.tabs.guildNamePlaceholder}
                       maxLength={MAX_GUILD_NAME_LENGTH}
                       autoFocus
