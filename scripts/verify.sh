@@ -27,6 +27,15 @@ ran=0
 # fi
 # ---------------------------------------------------------------------------
 
+if [ -f package.json ]; then
+  echo "verify: node workspaces"
+  npm ci
+  npm run typecheck
+  npm test
+  npm run build
+  ran=$((ran + 1))
+fi
+
 if [ "$ran" -eq 0 ]; then
   echo "verify: no components yet (skipped)"
 fi
