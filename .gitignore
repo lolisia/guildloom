@@ -1,0 +1,13 @@
+# AI agent guides (local only)
+CLAUDE.md
+AGENTS.md
+
+# Temporary files and intermediate documents
+.artifact/
+
+# Local-only dev pipeline / agent tooling (never commit)
+.claude/
+.opencode/
+opencode.json
+opencode.jsonc
+.worktrees/
