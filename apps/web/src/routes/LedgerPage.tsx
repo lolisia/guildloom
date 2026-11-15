@@ -2,8 +2,9 @@
  * The quest ledger ("의뢰 원장"): every quest as a sortable table.
  *
  * Filters (text, multi-select stage, tag) are sent to the list endpoint; the
- * eight columns sort client-side on header clicks. Clicking a row opens the
- * same `?quest=<id>` drawer as the board.
+ * eleven columns sort client-side on header clicks. The M2a columns (party,
+ * bounty and floor progress) sit after tags, before the stage. Clicking a row
+ * opens the same `?quest=<id>` drawer as the board.
  *
  * The table follows DESIGN.md: a paper panel holds the filters, the header row
  * sits on the sunken layer, rows are separated by a 1px line and darken to
@@ -24,6 +25,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 
 import { fetchQuests, fetchTags } from "../api/quests";
 import AdventurerSprite from "../components/AdventurerSprite";
+import { formatBounty } from "../components/board/QuestCard";
 import Icon from "../components/Icon";
 import QuestDrawer from "../components/quest/QuestDrawer";
 import RankBadge from "../components/RankBadge";
@@ -34,11 +36,14 @@ import { isImeComposing } from "../lib/ime";
 import { STAGE_ICON } from "../lib/icons";
 import { queryKeys } from "../lib/queryKeys";
 
-/** The eight ledger columns, in display order. */
+/** The eleven ledger columns, in display order. */
 const LEDGER_COLUMNS = [
   "number",
   "title",
   "tags",
+  "party",
+  "bounty",
+  "floors",
   "stage",
   "rank",
   "createdBy",
@@ -80,6 +85,11 @@ function compareRank(left: Rank | null, right: Rank | null): number {
   return RANKS.indexOf(left) - RANKS.indexOf(right);
 }
 
+/** Party member names in display order, used by the column and its sort. */
+function partyLabel(quest: QuestSummary): string {
+  return quest.party.map((member) => member.displayName).join(", ");
+}
+
 function compareQuests(
   left: QuestSummary,
   right: QuestSummary,
@@ -92,6 +102,14 @@ function compareQuests(
       return left.title.localeCompare(right.title, "ko");
     case "tags":
       return left.tags.join(", ").localeCompare(right.tags.join(", "), "ko");
+    case "party":
+      return partyLabel(left).localeCompare(partyLabel(right), "ko");
+    case "bounty":
+      return left.bounty.total - right.bounty.total;
+    case "floors": {
+      const byDone = left.floors.done - right.floors.done;
+      return byDone !== 0 ? byDone : left.floors.total - right.floors.total;
+    }
     case "stage":
       return stageOrder(left.stage) - stageOrder(right.stage);
     case "rank":
@@ -429,6 +447,31 @@ export default function LedgerPage() {
                       {ko.ledger.noTags}
                     </span>
                   )}
+                </td>
+                <td className="px-2 py-2">
+                  {quest.party.length > 0 ? (
+                    <span className="flex max-w-48 flex-wrap gap-x-2 gap-y-0.5 text-xs text-ink">
+                      {quest.party.map((member) => (
+                        <span
+                          key={member.userId}
+                          data-party-role={member.role}
+                          className="whitespace-nowrap"
+                        >
+                          {member.displayName}
+                        </span>
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted">
+                      {ko.quest.emptyParty}
+                    </span>
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-gold">
+                  {formatBounty(quest.bounty.total)}
+                </td>
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-ink">
+                  {quest.floors.done}/{quest.floors.total}
                 </td>
                 <td className="whitespace-nowrap px-2 py-2">
                   <span className="inline-flex items-center gap-2 text-xs text-ink">

@@ -323,7 +323,7 @@ describe("auth", () => {
 
   it("marks the session cookie Secure behind HTTPS", async () => {
     const { db, close: closeDb } = openDb(":memory:");
-    const app = await buildApp({ db, trustProxy: true });
+    const app = await buildApp({ db, trustProxy: true, realtime: false });
     try {
       createUser(db, { loginId: "alice" });
 

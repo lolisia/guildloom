@@ -98,6 +98,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 60_000,
     updatedAt: NOW - 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 

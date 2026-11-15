@@ -116,6 +116,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 3 * 86_400_000,
     updatedAt: NOW - 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   },
   {
     id: 2,
@@ -128,6 +132,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: NOW - 2 * 3_600_000,
     updatedAt: NOW - 2 * 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
   {
     id: 3,
@@ -140,6 +148,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 3, displayName: "루나" },
     createdAt: NOW - 30 * 60_000,
     updatedAt: NOW - 30 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 400, multiplier: 1, total: 400, days: 0, dusty: false },
   },
   {
     id: 4,
@@ -152,6 +164,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 5 * 60_000,
     updatedAt: NOW - 5 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 
@@ -389,7 +405,22 @@ describe("board design", () => {
     expect(time).toHaveClass("text-[12px]", "text-muted");
     expect(time).toHaveTextContent("3일 전");
 
-    expect(card.querySelector('[data-user-id="1"]')).toHaveClass(
+    // A board-stage card without an active party shows the dashed 빈 파티
+    // placeholder instead of the creator avatar.
+    expect(card.querySelector('[data-user-id="1"]')).toBeNull();
+    expect(within(card).getByTestId("empty-party")).toHaveTextContent(
+      ko.quest.emptyParty,
+    );
+    expect(within(card).getByTestId("empty-party")).toHaveClass(
+      "border-dashed",
+      "border-[1.5px]",
+    );
+
+    // Other stages keep the creator avatar at the sm (32px) size.
+    const clearedCard = container.querySelector(
+      '[data-quest-id="4"]',
+    ) as HTMLElement;
+    expect(clearedCard.querySelector('[data-user-id="1"]')).toHaveClass(
       "h-8",
       "w-8",
     );
@@ -419,8 +450,18 @@ describe("board design", () => {
       }),
     );
 
+    stubFetch(boardHandler());
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+
     const { container } = render(
-      <QuestCard quest={QUESTS[0]!} onOpen={() => {}} />,
+      <QueryClientProvider client={queryClient}>
+        <QuestCard quest={QUESTS[0]!} onOpen={() => {}} />
+      </QueryClientProvider>,
     );
     const card = container.querySelector(
       '[data-quest-id="1"]',

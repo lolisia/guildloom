@@ -7,7 +7,16 @@
  */
 import { z } from "zod";
 
-import { RANKS, STAGES } from "./constants.js";
+import {
+  ACTIVE_MEMBER_STATUSES,
+  MEMBER_STATUSES,
+  NOMINATION_KINDS,
+  NOMINATION_STATES,
+  NOTIFICATION_TYPES,
+  PARTY_ROLES,
+  RANKS,
+  STAGES,
+} from "./constants.js";
 
 /** Numeric primary key (SQLite autoincrement). */
 export const idSchema = z.number().int();
@@ -227,6 +236,99 @@ export type TagSummary = z.infer<typeof tagSummarySchema>;
 export const tagListResponseSchema = z.array(tagSummarySchema);
 export type TagListResponse = z.infer<typeof tagListResponseSchema>;
 
+/** Party (담당자) role enum. */
+export const partyRoleSchema = z.enum(PARTY_ROLES);
+
+/** Party member clear status enum. */
+export const memberStatusSchema = z.enum(MEMBER_STATUSES);
+
+/** Statuses an active member may set for themselves. */
+export const activeMemberStatusSchema = z.enum(ACTIVE_MEMBER_STATUSES);
+
+/** How a nomination came about. */
+export const nominationKindSchema = z.enum(NOMINATION_KINDS);
+
+/** Nomination lifecycle state. */
+export const nominationStateSchema = z.enum(NOMINATION_STATES);
+
+/** In-app notification type. */
+export const notificationTypeSchema = z.enum(NOTIFICATION_TYPES);
+
+/** Bounty (현상금) shown on quest cards. */
+export const bountySchema = z.object({
+  base: z.number().int(),
+  multiplier: z.number(),
+  total: z.number().int(),
+  days: z.number().int(),
+  dusty: z.boolean(),
+});
+export type Bounty = z.infer<typeof bountySchema>;
+
+/** Active party member as summarised on a board card (leader first). */
+export const partySummarySchema = z.object({
+  userId: idSchema,
+  displayName: z.string(),
+  role: partyRoleSchema,
+  status: memberStatusSchema,
+});
+export type PartySummary = z.infer<typeof partySummarySchema>;
+
+/** Party member in the quest detail, retreated members included. */
+export const partyMemberSchema = z.object({
+  user: userRefSchema,
+  role: partyRoleSchema,
+  status: memberStatusSchema,
+  retreatReason: z.string().nullable(),
+  joinedAt: timestampSchema,
+});
+export type PartyMember = z.infer<typeof partyMemberSchema>;
+
+/** A pending nomination (지목) in the quest detail. */
+export const nominationSchema = z.object({
+  id: idSchema,
+  questId: idSchema,
+  nominee: userRefSchema,
+  nominatedBy: userRefSchema,
+  kind: nominationKindSchema,
+  state: nominationStateSchema,
+  passReason: z.string().nullable(),
+  createdAt: timestampSchema,
+});
+export type Nomination = z.infer<typeof nominationSchema>;
+
+/** A floor (층) of the quest dungeon. */
+export const floorSchema = z.object({
+  id: idSchema,
+  title: z.string(),
+  orderKey: z.string(),
+  doneAt: timestampSchema.nullable(),
+  doneBy: userRefSchema.nullable(),
+});
+export type Floor = z.infer<typeof floorSchema>;
+
+/** In-app notification row for the current user. */
+export const notificationSchema = z.object({
+  id: idSchema,
+  projectId: idSchema,
+  questId: idSchema.nullable(),
+  questNumber: z.number().int().nullable(),
+  questTitle: z.string().nullable(),
+  type: notificationTypeSchema,
+  actor: userRefSchema.nullable(),
+  payload: z.unknown(),
+  createdAt: timestampSchema,
+  readAt: timestampSchema.nullable(),
+});
+export type Notification = z.infer<typeof notificationSchema>;
+
+/** A level change reported after XP is awarded. */
+export const levelUpSchema = z.object({
+  userId: idSchema,
+  from: z.number().int(),
+  to: z.number().int(),
+});
+export type LevelUp = z.infer<typeof levelUpSchema>;
+
 /** Quest card data returned by list endpoints. */
 export const questSummarySchema = z.object({
   id: idSchema,
@@ -239,6 +341,13 @@ export const questSummarySchema = z.object({
   createdBy: userRefSchema,
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
+  party: z.array(partySummarySchema),
+  floors: z.object({
+    done: z.number().int(),
+    total: z.number().int(),
+  }),
+  pendingNominations: z.number().int(),
+  bounty: bountySchema,
 });
 export type QuestSummary = z.infer<typeof questSummarySchema>;
 
@@ -248,8 +357,20 @@ export const questSchema = questSummarySchema.extend({
   situation: z.string(),
   direction: z.string(),
   archiveReason: z.string().nullable(),
+  party: z.array(partyMemberSchema),
+  nominations: z.array(nominationSchema),
+  floors: z.array(floorSchema),
+  bounty: bountySchema,
+  firstClaimedAt: timestampSchema.nullable(),
 });
 export type Quest = z.infer<typeof questSchema>;
+
+/** My pending nomination together with the quest it belongs to. */
+export const myNominationSchema = nominationSchema.extend({
+  questNumber: z.number().int(),
+  questTitle: z.string(),
+});
+export type MyNomination = z.infer<typeof myNominationSchema>;
 
 /** `GET /api/projects/:pid/quests` response. */
 export const questListResponseSchema = z.array(questSummarySchema);
@@ -292,6 +413,119 @@ export const archiveQuestRequestSchema = z.object({
   reason: z.literal("dropped").optional(),
 });
 export type ArchiveQuestRequest = z.infer<typeof archiveQuestRequestSchema>;
+
+/** `POST /api/quests/:id/nominations` request (지목). */
+export const nominateRequestSchema = z.object({
+  userIds: z.array(idSchema).min(1).max(10),
+});
+export type NominateRequest = z.infer<typeof nominateRequestSchema>;
+
+/** `POST /api/nominations/:id/pass` request (패스 또는 토스). */
+export const passNominationRequestSchema = z.object({
+  reason: z.string().trim().max(100).optional(),
+  relayToUserId: idSchema.optional(),
+});
+export type PassNominationRequest = z.infer<
+  typeof passNominationRequestSchema
+>;
+
+/** `POST /api/quests/:id/leave` request (후퇴). */
+export const leavePartyRequestSchema = z.object({
+  reason: z.string().trim().max(100).optional(),
+});
+export type LeavePartyRequest = z.infer<typeof leavePartyRequestSchema>;
+
+/** `POST /api/quests/:id/status` request (공략 상태). */
+export const memberStatusRequestSchema = z.object({
+  status: activeMemberStatusSchema,
+});
+export type MemberStatusRequest = z.infer<typeof memberStatusRequestSchema>;
+
+/** `POST /api/quests/:id/retry` request (재도전 요청). */
+export const retryQuestRequestSchema = z.object({
+  comment: z.string().trim().min(1).max(500),
+});
+export type RetryQuestRequest = z.infer<typeof retryQuestRequestSchema>;
+
+/** `POST /api/quests/:id/floors` request (층 추가). */
+export const addFloorsRequestSchema = z.object({
+  // Whitespace-only lines are allowed through the schema; the server drops
+  // them before creating floors.
+  titles: z.array(z.string().max(200)).min(1).max(50),
+});
+export type AddFloorsRequest = z.infer<typeof addFloorsRequestSchema>;
+
+/** `PATCH /api/floors/:id` request. */
+export const updateFloorRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  done: z.boolean().optional(),
+});
+export type UpdateFloorRequest = z.infer<typeof updateFloorRequestSchema>;
+
+/** `POST /api/floors/:id/move` request. */
+export const moveFloorRequestSchema = z.object({
+  beforeId: idSchema.optional(),
+  afterId: idSchema.optional(),
+});
+export type MoveFloorRequest = z.infer<typeof moveFloorRequestSchema>;
+
+/** `POST /api/notifications/read` request. */
+export const readNotificationsRequestSchema = z.object({
+  ids: z.array(idSchema).optional(),
+  all: z.boolean().optional(),
+});
+export type ReadNotificationsRequest = z.infer<
+  typeof readNotificationsRequestSchema
+>;
+
+/** `GET /api/notifications` query (`unread=1`, limit 1-100, default 50). */
+export const notificationListQuerySchema = z.object({
+  unread: z.enum(["0", "1"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type NotificationListQuery = z.infer<
+  typeof notificationListQuerySchema
+>;
+
+/** `POST /api/quests/:id/nominations` and `.../reinforcements` response. */
+export const nominationListResponseSchema = z.object({
+  nominations: z.array(nominationSchema),
+});
+export type NominationListResponse = z.infer<
+  typeof nominationListResponseSchema
+>;
+
+/** `POST /api/quests/:id/clear` response. */
+export const clearQuestResponseSchema = z.object({
+  quest: questSchema,
+  rewards: z.array(
+    z.object({
+      userId: idSchema,
+      amount: z.number().int(),
+    }),
+  ),
+  levelUps: z.array(levelUpSchema),
+});
+export type ClearQuestResponse = z.infer<typeof clearQuestResponseSchema>;
+
+/** `GET /api/notifications` response. */
+export const notificationListResponseSchema = z.object({
+  items: z.array(notificationSchema),
+  unreadCount: z.number().int(),
+});
+export type NotificationListResponse = z.infer<
+  typeof notificationListResponseSchema
+>;
+
+/** `POST /api/quests/:id/floors` response (the quest's floors). */
+export const floorListResponseSchema = z.array(floorSchema);
+export type FloorListResponse = z.infer<typeof floorListResponseSchema>;
+
+/** `GET /api/me/nominations` response (my pending nominations). */
+export const myNominationsResponseSchema = z.array(myNominationSchema);
+export type MyNominationsResponse = z.infer<
+  typeof myNominationsResponseSchema
+>;
 
 /** `GET /api/projects/:pid/quests` query. `stage` is a comma-separated list. */
 export const listQuestsQuerySchema = z.object({

@@ -5,7 +5,9 @@
  * sprite manifest types shared by the guildloom server, web client and agents.
  */
 export * from "./api.js";
+export * from "./bounty.js";
 export * from "./constants.js";
 export * from "./events.js";
 export * from "./level.js";
+export * from "./rewards.js";
 export * from "./sprites.js";

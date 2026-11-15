@@ -33,7 +33,7 @@ interface StaticApp {
 /** Build an app with an in-memory database and the given web dist path. */
 async function createStaticApp(webDistPath?: string): Promise<StaticApp> {
   const { db, close: closeDb } = openDb(":memory:");
-  const app = await buildApp({ db, webDistPath });
+  const app = await buildApp({ db, webDistPath, realtime: false });
 
   return {
     app,

@@ -7,17 +7,34 @@
  *
  * The shell sits on the ground surface with the paper top bar above it
  * (DESIGN.md): depth comes from the ground/paper/sunken steps, not shadows.
+ * It also owns the authenticated-side realtime connection, the toast stack and
+ * the single LEVEL UP! modal.
  */
 import { useEffect } from "react";
 import { Outlet, useParams } from "react-router-dom";
 
+import { useRealtime } from "../lib/realtime";
+import LevelUpModal from "./LevelUpModal";
 import TabBar from "./TabBar";
+import ToastHost from "./ToastHost";
 
 /** localStorage key holding the last visited project id. */
 export const LAST_PROJECT_STORAGE_KEY = "gl:lastProject";
 
+/** Parse the route's guild id, or `null` outside a guild route. */
+function parseProjectId(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function AppLayout() {
   const { projectId } = useParams<{ projectId: string }>();
+  const activeProjectId = parseProjectId(projectId);
+
+  useRealtime(activeProjectId);
 
   useEffect(() => {
     if (!projectId) {
@@ -37,6 +54,8 @@ export function AppLayout() {
       <main className="mx-auto w-full max-w-screen-2xl px-4 py-6">
         <Outlet />
       </main>
+      <ToastHost />
+      <LevelUpModal />
     </div>
   );
 }

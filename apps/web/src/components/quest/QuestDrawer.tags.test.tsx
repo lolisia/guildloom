@@ -97,10 +97,32 @@ const QUEST_DETAIL: Quest = {
   createdBy: { id: 1, displayName: "김모험" },
   createdAt: Date.UTC(2026, 0, 2, 3, 0, 0),
   updatedAt: Date.UTC(2026, 0, 4, 3, 0, 0),
+  party: [
+    {
+      user: { id: 1, displayName: "김모험" },
+      role: "leader",
+      status: "fighting",
+      retreatReason: null,
+      joinedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
+    },
+  ],
+  pendingNominations: 0,
+  bounty: { base: 80, multiplier: 1, total: 80, days: 0, dusty: false },
   projectId: 1,
   situation: "상황",
   direction: "방향",
   archiveReason: null,
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 상황",
+      orderKey: "a0",
+      doneAt: null,
+      doneBy: null,
+    },
+  ],
+  firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 
 interface MockReply {

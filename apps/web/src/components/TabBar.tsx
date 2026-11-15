@@ -23,6 +23,7 @@ import { isImeComposing } from "../lib/ime";
 import { queryKeys } from "../lib/queryKeys";
 import AdventurerSprite from "./AdventurerSprite";
 import Icon from "./Icon";
+import NotificationsMenu from "./NotificationsMenu";
 import ThemeMenu from "./ThemeMenu";
 import { Button, TextInput } from "./ui";
 
@@ -62,16 +63,22 @@ export function TabBar() {
   const dialogTitleId = useId();
   const guildNameInputId = useId();
 
-  const projectsQuery = useQuery({
-    queryKey: queryKeys.projects,
-    queryFn: ({ signal }) => fetchProjects(signal),
-    retry: false,
-  });
-
   const meQuery = useQuery({
     queryKey: queryKeys.me,
     queryFn: ({ signal }) => fetchMe(signal),
     retry: false,
+  });
+  const user = meQuery.data?.user ?? null;
+
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: ({ signal }) => fetchProjects(signal),
+    retry: false,
+    // Belt and braces around logout: the settled handler removes every guild
+    // query, and the brief render before the route swaps to /login must not
+    // rebuild the project cache (and fire a 401 request). Only a signed-in
+    // adventurer needs the guild list.
+    enabled: user !== null,
   });
 
   const createMutation = useMutation({
@@ -87,15 +94,22 @@ export function TabBar() {
   const logoutMutation = useMutation({
     mutationFn: () => logout(),
     onSettled: () => {
+      // The QueryClient outlives the session (30s staleTime / 5min gcTime),
+      // so drop every guild query — notifications and pending nominations
+      // included — before another account can sign in on this browser. Only
+      // the public setup status and the explicit null `me` survive.
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] !== queryKeys.setupStatus[0] &&
+          query.queryKey[0] !== queryKeys.me[0],
+      });
       // Drop the session view immediately; the gate then renders /login.
       queryClient.setQueryData<MeResponse | null>(queryKeys.me, null);
-      queryClient.removeQueries({ queryKey: queryKeys.projects });
       navigate("/login", { replace: true });
     },
   });
 
   const projects: ProjectSummary[] = projectsQuery.data ?? [];
-  const user = meQuery.data?.user ?? null;
   const progress = user ? levelProgress(user.xp) : null;
   const level = user ? levelFromXp(user.xp) : null;
   const xpPercent =
@@ -281,6 +295,8 @@ export function TabBar() {
               </div>
             </div>
           ) : null}
+
+          {user ? <NotificationsMenu /> : null}
 
           <ThemeMenu />
 

@@ -7,18 +7,38 @@
  */
 import { z } from "zod";
 
-import { idSchema, stageSchema, userRefSchema } from "./api.js";
-import type { Stage } from "./constants.js";
+import {
+  bountySchema,
+  idSchema,
+  memberStatusSchema,
+  stageSchema,
+  userRefSchema,
+} from "./api.js";
+import type { MemberStatus, Stage } from "./constants.js";
 
-/** Every M1 quest event type. */
+/** Every quest event type (M1 lifecycle, then M2 party and boss events). */
 export const QUEST_EVENT_TYPES = [
   "quest_posted",
   "quest_edited",
   "quest_moved",
   "quest_archived",
+  "nominated",
+  "reinforcement_requested",
+  "claimed",
+  "passed",
+  "relayed",
+  "member_joined",
+  "member_left",
+  "member_status_changed",
+  "leader_changed",
+  "floor_added",
+  "floor_checked",
+  "boss_engaged",
+  "retry_requested",
+  "quest_cleared",
 ] as const;
 
-/** An M1 quest event type. */
+/** A quest event type. */
 export type QuestEventType = (typeof QUEST_EVENT_TYPES)[number];
 
 /** Quest event type enum. */
@@ -52,10 +72,11 @@ export const questEditedPayloadSchema = z.object({
 });
 export type QuestEditedPayload = z.infer<typeof questEditedPayloadSchema>;
 
-/** `quest_moved` payload. */
+/** `quest_moved` payload. `auto` marks a stage change computed by the server. */
 export const questMovedPayloadSchema = z.object({
   from: stageSchema,
   to: stageSchema,
+  auto: z.boolean().optional(),
 });
 export type QuestMovedPayload = z.infer<typeof questMovedPayloadSchema>;
 
@@ -66,6 +87,101 @@ export const questArchivedPayloadSchema = z.object({
 export type QuestArchivedPayload = z.infer<
   typeof questArchivedPayloadSchema
 >;
+
+/** `nominated` payload: the nominees' ids and display names. */
+export const nominatedPayloadSchema = z.object({
+  userIds: z.array(idSchema),
+  names: z.array(z.string()),
+});
+export type NominatedPayload = z.infer<typeof nominatedPayloadSchema>;
+
+/** `reinforcement_requested` payload (same shape as `nominated`). */
+export const reinforcementRequestedPayloadSchema = nominatedPayloadSchema;
+export type ReinforcementRequestedPayload = NominatedPayload;
+
+/** `claimed` payload (the actor accepted a nomination). */
+export const claimedPayloadSchema = z.object({});
+export type ClaimedPayload = z.infer<typeof claimedPayloadSchema>;
+
+/** `passed` payload: an optional reason for passing (패스). */
+export const passedPayloadSchema = z.object({
+  reason: z.string().nullish(),
+});
+export type PassedPayload = z.infer<typeof passedPayloadSchema>;
+
+/** `relayed` payload: who received the toss and why it was passed on. */
+export const relayedPayloadSchema = z.object({
+  toUserId: idSchema,
+  toName: z.string(),
+  reason: z.string().nullish(),
+});
+export type RelayedPayload = z.infer<typeof relayedPayloadSchema>;
+
+/** `member_joined` payload. */
+export const memberJoinedPayloadSchema = z.object({});
+export type MemberJoinedPayload = z.infer<typeof memberJoinedPayloadSchema>;
+
+/** `member_left` payload: an optional retreat reason (후퇴). */
+export const memberLeftPayloadSchema = z.object({
+  reason: z.string().nullish(),
+});
+export type MemberLeftPayload = z.infer<typeof memberLeftPayloadSchema>;
+
+/** `member_status_changed` payload. */
+export const memberStatusChangedPayloadSchema = z.object({
+  from: memberStatusSchema,
+  to: memberStatusSchema,
+});
+export type MemberStatusChangedPayload = z.infer<
+  typeof memberStatusChangedPayloadSchema
+>;
+
+/** `leader_changed` payload. */
+export const leaderChangedPayloadSchema = z.object({
+  userId: idSchema,
+  name: z.string(),
+});
+export type LeaderChangedPayload = z.infer<typeof leaderChangedPayloadSchema>;
+
+/** `floor_added` payload. */
+export const floorAddedPayloadSchema = z.object({
+  floorId: idSchema,
+  title: z.string(),
+});
+export type FloorAddedPayload = z.infer<typeof floorAddedPayloadSchema>;
+
+/** `floor_checked` payload (`done: false` reopens the floor). */
+export const floorCheckedPayloadSchema = z.object({
+  floorId: idSchema,
+  title: z.string(),
+  done: z.boolean(),
+});
+export type FloorCheckedPayload = z.infer<typeof floorCheckedPayloadSchema>;
+
+/** `boss_engaged` payload. */
+export const bossEngagedPayloadSchema = z.object({});
+export type BossEngagedPayload = z.infer<typeof bossEngagedPayloadSchema>;
+
+/** `retry_requested` payload: the reviewer's comment. */
+export const retryRequestedPayloadSchema = z.object({
+  comment: z.string(),
+});
+export type RetryRequestedPayload = z.infer<
+  typeof retryRequestedPayloadSchema
+>;
+
+/** `quest_cleared` payload: per-member rewards and the frozen bounty. */
+export const questClearedPayloadSchema = z.object({
+  rewards: z.array(
+    z.object({
+      userId: idSchema,
+      name: z.string(),
+      amount: z.number().int(),
+    }),
+  ),
+  bounty: bountySchema,
+});
+export type QuestClearedPayload = z.infer<typeof questClearedPayloadSchema>;
 
 /** A single quest event as returned by `GET /api/quests/:id/events`. */
 export const questEventSchema = z.object({
@@ -93,6 +209,14 @@ export const EVENT_STAGE_LABELS = {
   cleared: "클리어",
   archived: "아카이브",
 } as const satisfies Record<Stage, string>;
+
+/** Korean labels for every party member clear status. */
+export const MEMBER_STATUS_LABELS = {
+  joined: "합류",
+  fighting: "전투중",
+  done: "전투 완료",
+  retreated: "후퇴",
+} as const satisfies Record<MemberStatus, string>;
 
 /** Kinds of segments produced by {@link renderEvent}. */
 export type SegmentKind = "actor" | "text" | "quest" | "stage";
@@ -188,6 +312,13 @@ export function renderEvent(
       }
       case "quest_moved": {
         const payload = questMovedPayloadSchema.parse(event.payload);
+        if (payload.auto === true) {
+          return [
+            { kind: "text", text: "의뢰가 " },
+            { kind: "stage", text: `'${EVENT_STAGE_LABELS[payload.to]}'` },
+            { kind: "text", text: " 으로 이동했습니다." },
+          ];
+        }
         return [
           renderActor(event, ctx),
           { kind: "text", text: " 가 의뢰를 " },
@@ -213,6 +344,136 @@ export function renderEvent(
         return [
           renderActor(event, ctx),
           { kind: "text", text: " 가 의뢰를 내렸습니다." },
+        ];
+      }
+      case "nominated": {
+        const payload = nominatedPayloadSchema.parse(event.payload);
+        const names = payload.names.map((name) => `'${name}'`).join(", ");
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: ` 가 ${names} 를 지목했습니다.` },
+        ];
+      }
+      case "reinforcement_requested": {
+        const payload = reinforcementRequestedPayloadSchema.parse(
+          event.payload,
+        );
+        const names = payload.names.map((name) => `'${name}'`).join(", ");
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: ` 가 ${names} 에게 증원을 요청했습니다.` },
+        ];
+      }
+      case "claimed": {
+        claimedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: " 가 의뢰를 수락하고 파티에 합류했습니다." },
+        ];
+      }
+      case "passed": {
+        const payload = passedPayloadSchema.parse(event.payload);
+        const reason = payload.reason?.trim() || null;
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 지목을 넘겼습니다${reason === null ? "" : `: ${reason}`}`,
+          },
+        ];
+      }
+      case "relayed": {
+        const payload = relayedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 '${payload.toName}' 에게 의뢰를 토스했습니다.`,
+          },
+        ];
+      }
+      case "member_joined": {
+        memberJoinedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: " 가 파티에 참여했습니다." },
+        ];
+      }
+      case "member_left": {
+        const payload = memberLeftPayloadSchema.parse(event.payload);
+        const reason = payload.reason?.trim() || null;
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 파티에서 나갔습니다${reason === null ? "" : `: ${reason}`}`,
+          },
+        ];
+      }
+      case "member_status_changed": {
+        const payload = memberStatusChangedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 공략 상태를 '${MEMBER_STATUS_LABELS[payload.to]}' 으로 변경했습니다.`,
+          },
+        ];
+      }
+      case "leader_changed": {
+        const payload = leaderChangedPayloadSchema.parse(event.payload);
+        // The actor of a leader change is whoever triggered the succession
+        // (e.g. the departing leader), so name the new leader from the payload.
+        return [
+          { kind: "actor", text: `'${payload.name}'` },
+          { kind: "text", text: " 가 새 파티장이 되었습니다." },
+        ];
+      }
+      case "floor_added": {
+        const payload = floorAddedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: ` 가 '${payload.title}' 을 추가했습니다.` },
+        ];
+      }
+      case "floor_checked": {
+        const payload = floorCheckedPayloadSchema.parse(event.payload);
+        const verb = payload.done ? "돌파했습니다." : "다시 열었습니다.";
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: ` 가 '${payload.title}' 을 ${verb}` },
+        ];
+      }
+      case "boss_engaged": {
+        bossEngagedPayloadSchema.parse(event.payload);
+        return [
+          {
+            kind: "text",
+            text: "파티원 모두 전투를 마쳤습니다. 보스전이 시작됩니다!",
+          },
+        ];
+      }
+      case "retry_requested": {
+        const payload = retryRequestedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          { kind: "text", text: ` 가 재도전을 요청했습니다: ${payload.comment}` },
+        ];
+      }
+      case "quest_cleared": {
+        const payload = questClearedPayloadSchema.parse(event.payload);
+        const rewards = payload.rewards
+          .map((reward) => `${reward.name} +${reward.amount}`)
+          .join(", ");
+        // An empty party still clears; only show the parenthetical when there
+        // is at least one member reward to list.
+        const suffix = rewards.length > 0 ? ` (${rewards})` : "";
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 던전 클리어를 선언했습니다!${suffix}`,
+          },
         ];
       }
       default:

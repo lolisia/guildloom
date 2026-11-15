@@ -38,6 +38,20 @@ const EVENT_ICON: Record<QuestEvent["type"], IconName> = {
   quest_edited: "edit",
   quest_moved: "arrow-right",
   quest_archived: "dropped",
+  nominated: "nominate",
+  reinforcement_requested: "reinforce",
+  claimed: "accept",
+  passed: "pass",
+  relayed: "relay",
+  member_joined: "joined",
+  member_left: "retreated",
+  member_status_changed: "fighting",
+  leader_changed: "party",
+  floor_added: "floor",
+  floor_checked: "floor",
+  boss_engaged: "boss",
+  retry_requested: "refresh",
+  quest_cleared: "cleared",
 };
 
 /** Icon shown to the left of an event row. */

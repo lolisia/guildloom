@@ -7,10 +7,76 @@
  * labels, the drawer labels, the ledger column labels and the relative-time
  * helpers are part of the T06 interface and must not be renamed.
  */
+import { MEMBER_STATUS_LABELS, type Notification } from "@guildloom/shared";
 
 /** Confirm prompt shown before bulk-creating quests from pasted titles. */
 const bulkConfirm = (count: number): string =>
   `${count}건을 의뢰로 등록할까요?`;
+
+/** Quest wording fallback when a notification carries no title. */
+const NOTIFICATION_QUEST_FALLBACK = "의뢰";
+
+/** Actor wording fallback when a system notification has no actor. */
+const NOTIFICATION_UNKNOWN_ACTOR = "어떤 모험가";
+
+/** `#12 '로그인 버그'` style quest label used by notification copy. */
+const notificationQuestLabel = (
+  questNumber: number | null,
+  questTitle: string | null,
+): string => {
+  if (questTitle === null) {
+    return NOTIFICATION_QUEST_FALLBACK;
+  }
+  return questNumber === null
+    ? `'${questTitle}'`
+    : `#${questNumber} '${questTitle}'`;
+};
+
+/**
+ * One Korean sentence per notification type.
+ *
+ * `actor` is the adventurer who triggered the notification (a system event
+ * falls back to {@link NOTIFICATION_UNKNOWN_ACTOR}) and `quest` is the label
+ * produced by {@link notificationQuestLabel}.
+ */
+const notificationTemplates = {
+  nominated: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}에 지목했습니다.`,
+  relayed: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}를 토스했습니다.`,
+  reinforce: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}에 증원을 요청했습니다.`,
+  boss_engaged: (quest: string): string =>
+    `${quest}의 보스전이 시작되었습니다.`,
+  retry_requested: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}의 재도전을 요청했습니다.`,
+  quest_cleared: (quest: string): string => `${quest}를 클리어했습니다.`,
+};
+
+/** Render a notification row (and its toast) as one Korean sentence. */
+function formatNotification(notification: Notification): string {
+  const quest = notificationQuestLabel(
+    notification.questNumber,
+    notification.questTitle,
+  );
+  const actor =
+    notification.actor?.displayName ?? NOTIFICATION_UNKNOWN_ACTOR;
+
+  switch (notification.type) {
+    case "nominated":
+      return notificationTemplates.nominated(actor, quest);
+    case "relayed":
+      return notificationTemplates.relayed(actor, quest);
+    case "reinforce":
+      return notificationTemplates.reinforce(actor, quest);
+    case "boss_engaged":
+      return notificationTemplates.boss_engaged(quest);
+    case "retry_requested":
+      return notificationTemplates.retry_requested(actor, quest);
+    case "quest_cleared":
+      return notificationTemplates.quest_cleared(quest);
+  }
+}
 
 /** Relative-time labels shared by the ledger and the quest event history. */
 export const timeStrings = {
@@ -206,6 +272,10 @@ export const ko = {
       direction: "수정 방향",
       dungeonView: "던전 뷰",
       dungeonComingSoon: "던전 뷰 준비 중",
+      dungeonProgress: "던전 진행도",
+      boss: "보스",
+      floorRatio: (done: number, total: number): string => `${done}/${total}`,
+      progressPercent: (percent: number): string => `${percent}%`,
       history: "모험 기록",
       archive: "의뢰 내리기",
       archiveConfirm: "이 의뢰를 내릴까요?",
@@ -214,6 +284,45 @@ export const ko = {
       emptySituation: "현재 상황이 아직 없습니다.",
       emptyDirection: "수정 방향이 아직 없습니다.",
       emptyHistory: "모험 기록이 아직 없습니다.",
+      floors: {
+        title: "던전 층",
+        empty: "아직 층이 없습니다.",
+        addPlaceholder: "층 제목을 입력하고 Enter",
+        add: "층 추가",
+        adding: "추가하는 중…",
+        check: (title: string): string => `${title} 완료`,
+        titleLabel: (title: string): string => `${title} 제목`,
+        delete: (title: string): string => `${title} 삭제`,
+        moveUp: (title: string): string => `${title} 위로 이동`,
+        moveDown: (title: string): string => `${title} 아래로 이동`,
+        drag: (title: string): string => `${title} 순서 변경`,
+        addFailed: "층을 추가하지 못했습니다.",
+        saveFailed: "층을 저장하지 못했습니다.",
+        deleteFailed: "층을 삭제하지 못했습니다.",
+        moveFailed: "층 순서를 바꾸지 못했습니다.",
+      },
+      bossBattle: {
+        waiting: "보스전 — 의뢰인의 확인을 기다리는 중",
+        clear: "던전 클리어 선언",
+        retry: "재도전 요청",
+        retryTitle: "재도전 요청",
+        retryDescription:
+          "의뢰인에게 재도전을 요청합니다. 사유는 필수입니다.",
+        retryCommentLabel: "재도전 사유",
+        retryCommentPlaceholder:
+          "다시 도전해야 하는 이유를 적어 주세요 (최대 500자)",
+        retrySubmit: "재도전 요청 보내기",
+        retrySubmitting: "보내는 중…",
+        retryFailed: "재도전을 요청하지 못했습니다.",
+      },
+      clear: {
+        action: "클리어 선언",
+        working: "선언하는 중…",
+        failed: "클리어를 선언하지 못했습니다.",
+        celebrationTitle: "던전 클리어!",
+        reward: (amount: number): string =>
+          `+${amount.toLocaleString("ko-KR")} XP`,
+      },
     },
   },
   quest: {
@@ -234,6 +343,15 @@ export const ko = {
     rank: "등급",
     rankNone: "등급 없음",
     stage: "단계",
+    party: "파티",
+    partyLeader: "파티장",
+    emptyParty: "빈 파티",
+    memberStatuses: MEMBER_STATUS_LABELS,
+    floors: "층",
+    bounty: "현상금",
+    bountyMultiplier: (multiplier: number): string => `×${multiplier}`,
+    pendingNominations: "지목 대기",
+    dusty: "먼지 쌓인 의뢰",
     createdBy: "작성자",
     createdAt: "등록일",
     updatedAt: "수정일",
@@ -281,6 +399,9 @@ export const ko = {
       number: "번호",
       title: "제목",
       tags: "태그",
+      party: "파티",
+      bounty: "현상금",
+      floors: "층",
       stage: "단계",
       rank: "등급",
       createdBy: "작성자",
@@ -334,6 +455,81 @@ export const ko = {
     leaveGuild: "길드 떠나기",
     leaveConfirm: "정말 길드를 떠날까요?",
     leaveFailed: "길드를 떠나지 못했습니다.",
+  },
+  notifications: {
+    label: "알림",
+    title: "알림",
+    loading: "알림을 불러오는 중…",
+    loadFailed: "알림을 불러오지 못했습니다.",
+    empty: "새 알림이 없습니다.",
+    markAllRead: "모두 읽음",
+    markAllReadFailed: "알림을 읽음으로 표시하지 못했습니다.",
+    accept: "수락",
+    accepting: "수락 중…",
+    acceptFailed: "지목을 수락하지 못했습니다.",
+    pass: "패스",
+    unknownActor: NOTIFICATION_UNKNOWN_ACTOR,
+    questFallback: NOTIFICATION_QUEST_FALLBACK,
+    questLabel: notificationQuestLabel,
+    templates: notificationTemplates,
+    format: formatNotification,
+  },
+  pass: {
+    title: "지목 넘기기",
+    description: "이번 지목을 넘기고, 필요하면 다른 모험가에게 토스하세요.",
+    reasonLabel: "넘기는 이유",
+    reasonPlaceholder: "이유를 직접 입력 (최대 100자)",
+    presetsLabel: "빠른 선택",
+    tossLabel: "토스할 모험가",
+    tossNone: "토스하지 않음",
+    membersLoadFailed: "모험가 목록을 불러오지 못했습니다.",
+    submit: "패스하기",
+    submitting: "넘기는 중…",
+    failed: "지목을 넘기지 못했습니다.",
+  },
+  party: {
+    title: "파티",
+    activeList: "참여 중인 모험가",
+    empty: "아직 파티가 없습니다.",
+    statusChip: "공략 상태",
+    retreated: "후퇴한 모험가",
+    retreatReason: (reason: string): string => `사유: ${reason}`,
+    noRetreatReason: "사유 없음",
+    nominationLabel: "지목",
+    nominatedBy: (name: string): string => `${name}님이 지목`,
+    nominationList: "지목 대기",
+    cancelNomination: "지목 취소",
+    accept: "수락",
+    accepting: "수락 중…",
+    pass: "패스",
+    join: "참여",
+    joining: "참여 중…",
+    leave: "후퇴",
+    leaving: "후퇴하는 중…",
+    leaveTitle: "후퇴",
+    leaveDescription: "파티에서 후퇴합니다. 사유는 선택 사항입니다.",
+    leaveReasonLabel: "후퇴 사유",
+    leaveReasonPlaceholder: "이유를 남겨 주세요 (최대 100자)",
+    leaveConfirm: "후퇴하기",
+    nominate: "지목",
+    nominateTitle: "지목할 모험가",
+    nominateSubmit: "지목 보내기",
+    reinforce: "증원 요청",
+    reinforceTitle: "증원 요청할 모험가",
+    reinforceSubmit: "증원 요청 보내기",
+    submitting: "보내는 중…",
+    membersLoadFailed: "길드원 목록을 불러오지 못했습니다.",
+    noCandidates: "지목할 수 있는 길드원이 없습니다.",
+    errors: {
+      forbidden: "이 작업을 할 권한이 없습니다.",
+      conflict: "이미 처리되었거나 지금은 바꿀 수 없는 상태입니다.",
+      failed: "파티 작업을 처리하지 못했습니다.",
+    },
+  },
+  levelUp: {
+    title: "LEVEL UP!",
+    level: (from: number, to: number): string => `Lv.${from} → Lv.${to}`,
+    hint: "새로운 레벨에 도달했습니다.",
   },
   theme: {
     label: "테마",

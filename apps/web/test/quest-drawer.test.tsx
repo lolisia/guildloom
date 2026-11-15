@@ -110,10 +110,32 @@ const QUEST: Quest = {
   createdBy: { id: 7, displayName: "김모험" },
   createdAt: CREATED_AT,
   updatedAt: CREATED_AT,
+  party: [
+    {
+      user: { id: 7, displayName: "김모험" },
+      role: "leader",
+      status: "fighting",
+      retreatReason: null,
+      joinedAt: CREATED_AT,
+    },
+  ],
+  pendingNominations: 0,
+  bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   projectId: 1,
   situation: "첫 줄\n둘째 줄 https://example.com",
   direction: "다음 단계로 진행합니다.",
   archiveReason: null,
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 재현",
+      orderKey: "a0",
+      doneAt: null,
+      doneBy: null,
+    },
+  ],
+  firstClaimedAt: CREATED_AT,
 };
 
 const EVENTS: QuestEvent[] = [
@@ -276,7 +298,7 @@ describe("QuestDrawer design", () => {
     expect(closeIcon).toHaveAttribute("height", "32");
   });
 
-  it("keeps the 120px sunken dungeon view with icon, mark, copy and avatar", async () => {
+  it("keeps the 120px sunken dungeon view with stage icon, mark, progress and party sprite", async () => {
     const { dialog } = await openDrawer();
     const placeholder = within(dialog).getByTestId(
       "quest-dungeon-placeholder",
@@ -292,9 +314,8 @@ describe("QuestDrawer design", () => {
     expect(
       within(placeholder).getByText(ko.board.drawer.dungeonView),
     ).toBeInTheDocument();
-    expect(
-      within(placeholder).getByText(ko.board.drawer.dungeonComingSoon),
-    ).toBeInTheDocument();
+    // QUEST has one unchecked floor, so the board fallback (0%) is used.
+    expect(placeholder).toHaveAttribute("data-dungeon-progress", "0");
 
     const stageIcon = placeholder.querySelector("img");
     expect(stageIcon?.getAttribute("src")).toBe(
@@ -308,11 +329,17 @@ describe("QuestDrawer design", () => {
     expect(mark?.className).toContain("h-0.5");
     expect(mark?.className).toContain(STAGE_MARK_CLASSES.board);
 
-    const avatar = placeholder.querySelector('[data-user-id="7"]');
-    expect(avatar).not.toBeNull();
-    expect(avatar).toHaveClass("h-10", "w-10");
-    expect(avatar?.parentElement?.className).toContain("right-3");
-    expect(avatar?.parentElement?.className).toContain("top-3");
+    const partyLane = placeholder.querySelector(
+      '[data-dungeon-member="7"]',
+    ) as HTMLElement | null;
+    expect(partyLane).not.toBeNull();
+    expect(partyLane).toHaveAttribute("data-dungeon-state", "attack");
+    expect(partyLane?.style.left).toBe("0%");
+
+    const partySprite = placeholder.querySelector('[data-user-id="7"]');
+    expect(partySprite).not.toBeNull();
+    expect(partySprite).toHaveClass("h-8", "w-8");
+    expect(partySprite).toHaveAttribute("data-state", "attack");
   });
 
   it("uses the board stage colour mapping and the stage-specific icon", async () => {
@@ -454,6 +481,31 @@ describe("QuestDrawer design", () => {
       expect(
         within(dialog).getByText(formatKoreanDateTime(event.createdAt)),
       ).toBeInTheDocument();
+    }
+  });
+
+  it("maps every M2 event type to its icon", () => {
+    const expected: Partial<Record<QuestEvent["type"], string>> = {
+      nominated: "nominate",
+      reinforcement_requested: "reinforce",
+      claimed: "accept",
+      passed: "pass",
+      relayed: "relay",
+      member_joined: "joined",
+      member_left: "retreated",
+      member_status_changed: "fighting",
+      leader_changed: "party",
+      floor_added: "floor",
+      floor_checked: "floor",
+      boss_engaged: "boss",
+      retry_requested: "refresh",
+      quest_cleared: "cleared",
+    };
+
+    for (const [type, icon] of Object.entries(expected)) {
+      expect(
+        eventIcon({ ...EVENTS[0]!, type: type as QuestEvent["type"] }),
+      ).toBe(icon);
     }
   });
 

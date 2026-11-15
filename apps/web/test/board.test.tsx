@@ -104,6 +104,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 3 * 86_400_000,
     updatedAt: NOW - 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   },
   {
     id: 2,
@@ -116,6 +120,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: NOW - 2 * 3_600_000,
     updatedAt: NOW - 2 * 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
   {
     id: 3,
@@ -128,6 +136,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 3, displayName: "루나" },
     createdAt: NOW - 30 * 60_000,
     updatedAt: NOW - 30 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 400, multiplier: 1, total: 400, days: 0, dusty: false },
   },
   {
     id: 4,
@@ -140,6 +152,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 5 * 60_000,
     updatedAt: NOW - 5 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 
@@ -149,6 +165,26 @@ const QUEST_DETAIL: Quest = {
   situation: "첫 줄\n둘째 줄 https://example.com",
   direction: "다음 단계로 진행합니다.",
   archiveReason: null,
+  party: [
+    {
+      user: { id: 1, displayName: "김모험" },
+      role: "leader",
+      status: "fighting",
+      retreatReason: null,
+      joinedAt: NOW - 3 * 86_400_000,
+    },
+  ],
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 재현",
+      orderKey: "a0",
+      doneAt: NOW - 3_600_000,
+      doneBy: { id: 1, displayName: "김모험" },
+    },
+  ],
+  firstClaimedAt: NOW - 3 * 86_400_000,
 };
 
 const EVENTS: QuestEvent[] = [
@@ -314,7 +350,20 @@ describe("BoardPage", () => {
     expect(screen.getByText("보스 의뢰")).toBeInTheDocument();
     expect(screen.getByText("클리어 의뢰")).toBeInTheDocument();
 
-    const creatorSprite = container.querySelector('[data-user-id="1"]');
+    // Quest 1 sits on the board stage with an empty party, so its creator
+    // avatar is replaced by the dashed 빈 파티 placeholder. Quest 4 (cleared,
+    // also created by user 1) keeps the normal creator sprite.
+    const boardCard = container.querySelector<HTMLElement>(
+      '[data-quest-id="1"]',
+    );
+    expect(boardCard).not.toBeNull();
+    expect(within(boardCard!).getByTestId("empty-party")).toHaveTextContent(
+      ko.quest.emptyParty,
+    );
+    expect(boardCard?.querySelector('[data-user-id="1"]')).toBeNull();
+
+    const clearedCard = container.querySelector('[data-quest-id="4"]');
+    const creatorSprite = clearedCard?.querySelector('[data-user-id="1"]');
     expect(creatorSprite).not.toBeNull();
     expect(creatorSprite).toHaveClass("h-8", "w-8");
 
@@ -430,15 +479,20 @@ describe("BoardPage", () => {
     });
 
     expect(
-      await within(dialog).findByText(ko.board.drawer.dungeonComingSoon),
+      await within(dialog).findByText(ko.board.drawer.dungeonView),
     ).toBeInTheDocument();
     const placeholder = within(dialog).getByTestId(
       "quest-dungeon-placeholder",
     );
     expect(placeholder).toHaveStyle({ height: "120px" });
-    const creatorSprite = placeholder.querySelector('[data-user-id="1"]');
-    expect(creatorSprite).not.toBeNull();
-    expect(creatorSprite).toHaveClass("h-10", "w-10");
+    // QUEST_DETAIL's single floor is checked, so the party sits at 100%.
+    expect(placeholder).toHaveAttribute("data-dungeon-progress", "1");
+    const partySprite = placeholder.querySelector(
+      '[data-dungeon-member="1"] [data-user-id="1"]',
+    );
+    expect(partySprite).not.toBeNull();
+    expect(partySprite).toHaveAttribute("data-state", "attack");
+    expect(partySprite).toHaveClass("h-8", "w-8");
 
     const situation = within(dialog).getByTestId("quest-situation");
     expect(situation.querySelector(".whitespace-pre-wrap")).not.toBeNull();

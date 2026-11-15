@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MEMBER_STATUS_LABELS,
   renderEvent,
   type EventRenderContext,
   type QuestEvent,
@@ -167,6 +168,268 @@ describe("renderEvent", () => {
     expect(segments[0]?.text).toBe("'김철수' 의 소환수 '#9'");
   });
 
+  it("renders an auto move without an actor", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "quest_moved",
+        payload: { from: "dungeon", to: "boss", auto: true },
+      }),
+    );
+
+    expect(sentence(segments)).toBe("의뢰가 '보스전' 으로 이동했습니다.");
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "text",
+      "stage",
+      "text",
+    ]);
+  });
+
+  it("renders a manual move with an actor even when auto is false", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "quest_moved",
+        payload: { from: "board", to: "dungeon", auto: false },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 의뢰를 '던전 진행' 으로 옮겼습니다.",
+    );
+  });
+
+  it("renders a nomination with every nominee", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "nominated",
+        payload: { userIds: [2, 3], names: ["이영희", "박민수"] },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 '이영희', '박민수' 를 지목했습니다.",
+    );
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "actor",
+      "text",
+    ]);
+  });
+
+  it("renders a reinforcement request", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "reinforcement_requested",
+        payload: { userIds: [3], names: ["박민수"] },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 '박민수' 에게 증원을 요청했습니다.",
+    );
+  });
+
+  it("renders a claim", () => {
+    expect(sentence(renderEvent(makeEvent({ type: "claimed", payload: {} }))))
+      .toBe("'김철수' 가 의뢰를 수락하고 파티에 합류했습니다.");
+  });
+
+  it("renders a pass with and without a reason", () => {
+    const withReason = renderEvent(
+      makeEvent({ type: "passed", payload: { reason: "내 영역 아님" } }),
+    );
+    const withoutReason = renderEvent(
+      makeEvent({ type: "passed", payload: { reason: null } }),
+    );
+
+    expect(sentence(withReason)).toBe(
+      "'김철수' 가 지목을 넘겼습니다: 내 영역 아님",
+    );
+    expect(sentence(withoutReason)).toBe("'김철수' 가 지목을 넘겼습니다");
+  });
+
+  it("renders a relay with the target name", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "relayed",
+        payload: { toUserId: 4, toName: "최지훈", reason: "내 영역 아님" },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 '최지훈' 에게 의뢰를 토스했습니다.",
+    );
+  });
+
+  it("renders a member joining", () => {
+    expect(
+      sentence(renderEvent(makeEvent({ type: "member_joined", payload: {} }))),
+    ).toBe("'김철수' 가 파티에 참여했습니다.");
+  });
+
+  it("renders a member leaving with and without a reason", () => {
+    expect(
+      sentence(
+        renderEvent(
+          makeEvent({
+            type: "member_left",
+            payload: { reason: "담당자가 아님" },
+          }),
+        ),
+      ),
+    ).toBe("'김철수' 가 파티에서 나갔습니다: 담당자가 아님");
+
+    expect(
+      sentence(
+        renderEvent(makeEvent({ type: "member_left", payload: { reason: null } })),
+      ),
+    ).toBe("'김철수' 가 파티에서 나갔습니다");
+  });
+
+  it("renders a status change with its Korean label", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "member_status_changed",
+        payload: { from: "joined", to: "fighting" },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 공략 상태를 '전투중' 으로 변경했습니다.",
+    );
+    expect(MEMBER_STATUS_LABELS.done).toBe("전투 완료");
+    expect(MEMBER_STATUS_LABELS.retreated).toBe("후퇴");
+  });
+
+  it("renders a leader change using the new leader from the payload", () => {
+    // The actor (the member whose leave triggered the promotion) differs from
+    // the new leader on purpose, proving `payload.name` is what gets rendered.
+    const segments = renderEvent(
+      makeEvent({
+        type: "leader_changed",
+        payload: { userId: 4, name: "최지훈" },
+        actor: { id: 9, displayName: "박민수" },
+      }),
+    );
+
+    expect(sentence(segments)).toBe("'최지훈' 가 새 파티장이 되었습니다.");
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "actor",
+      "text",
+    ]);
+    expect(segments[0]).toEqual({ kind: "actor", text: "'최지훈'" });
+  });
+
+  it("renders a leader change even without an actor", () => {
+    expect(
+      sentence(
+        renderEvent(
+          makeEvent({
+            type: "leader_changed",
+            payload: { userId: 4, name: "최지훈" },
+            actor: null,
+          }),
+        ),
+      ),
+    ).toBe("'최지훈' 가 새 파티장이 되었습니다.");
+  });
+
+  it("renders a floor being added", () => {
+    expect(
+      sentence(
+        renderEvent(
+          makeEvent({
+            type: "floor_added",
+            payload: { floorId: 5, title: "3층: API 수정" },
+          }),
+        ),
+      ),
+    ).toBe("'김철수' 가 '3층: API 수정' 을 추가했습니다.");
+  });
+
+  it("renders a floor being cleared and reopened", () => {
+    const cleared = renderEvent(
+      makeEvent({
+        type: "floor_checked",
+        payload: { floorId: 5, title: "3층: API 수정", done: true },
+      }),
+    );
+    const reopened = renderEvent(
+      makeEvent({
+        type: "floor_checked",
+        payload: { floorId: 5, title: "3층: API 수정", done: false },
+      }),
+    );
+
+    expect(sentence(cleared)).toBe(
+      "'김철수' 가 '3층: API 수정' 을 돌파했습니다.",
+    );
+    expect(sentence(reopened)).toBe(
+      "'김철수' 가 '3층: API 수정' 을 다시 열었습니다.",
+    );
+  });
+
+  it("renders boss engagement without an actor segment", () => {
+    const segments = renderEvent(
+      makeEvent({ type: "boss_engaged", payload: {}, actor: null }),
+    );
+
+    expect(segments).toEqual([
+      {
+        kind: "text",
+        text: "파티원 모두 전투를 마쳤습니다. 보스전이 시작됩니다!",
+      },
+    ]);
+  });
+
+  it("renders a retry request with its comment", () => {
+    expect(
+      sentence(
+        renderEvent(
+          makeEvent({
+            type: "retry_requested",
+            payload: { comment: "그대로임, 다시 확인 바람" },
+          }),
+        ),
+      ),
+    ).toBe("'김철수' 가 재도전을 요청했습니다: 그대로임, 다시 확인 바람");
+  });
+
+  it("renders a clear with the per-member rewards", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "quest_cleared",
+        payload: {
+          rewards: [
+            { userId: 2, name: "이영희", amount: 48 },
+            { userId: 3, name: "최지훈", amount: 48 },
+          ],
+          bounty: { base: 40, multiplier: 1.2, total: 96, days: 1, dusty: false },
+        },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 던전 클리어를 선언했습니다! (이영희 +48, 최지훈 +48)",
+    );
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "actor",
+      "text",
+    ]);
+  });
+
+  it("omits the reward list when the party was empty", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "quest_cleared",
+        payload: {
+          rewards: [],
+          bounty: { base: 40, multiplier: 2, total: 80, days: 5, dusty: true },
+        },
+      }),
+    );
+
+    expect(sentence(segments)).toBe("'김철수' 가 던전 클리어를 선언했습니다!");
+  });
+
   it("returns a safe text segment for malformed payloads", () => {
     const segments = renderEvent(
       makeEvent({
@@ -183,7 +446,7 @@ describe("renderEvent", () => {
   it("returns a safe text segment for unknown event types", () => {
     const event = {
       ...makeEvent(),
-      type: "quest_cleared",
+      type: "quest_danced",
     } as unknown as QuestEvent;
 
     expect(() => renderEvent(event)).not.toThrow();
