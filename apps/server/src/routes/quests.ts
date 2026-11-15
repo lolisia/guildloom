@@ -28,8 +28,12 @@ import {
   type ArchiveQuestRequest,
   type BulkCreateQuestsRequest,
   type CreateQuestRequest,
+  type Floor,
   type ListQuestsQuery,
   type MoveQuestRequest,
+  type Nomination,
+  type PartyMember,
+  type PartySummary,
   type Quest,
   type QuestEditableField,
   type QuestEvent,
@@ -37,25 +41,41 @@ import {
   type QuestSummary,
   type Stage,
   type UpdateQuestRequest,
+  type UserRef,
 } from "@guildloom/shared";
-import { and, asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { generateKeyBetween } from "fractional-indexing";
 
 import type { AppDb } from "../db/index.js";
 import {
+  partyMembers,
   projects,
   questEvents,
+  questFloors,
+  questNominations,
   questTags,
   quests,
   tags,
   users,
   type ProjectRow,
+  type QuestNominationRow,
   type QuestRow,
   type TagRow,
   type UserRow,
 } from "../db/schema.js";
 import { authenticate, requireMembership } from "../lib/auth.js";
 import { HttpError } from "../lib/errors.js";
+import { bottomOrderKey, insertQuestEvent } from "../lib/party.js";
 
 /** Numeric route parameters (`:pid`, `:id`). */
 const projectParamsSchema = z.object({
@@ -69,17 +89,6 @@ const questParamsSchema = z.object({
 interface QuestWithCreator {
   quest: QuestRow;
   creator: UserRow;
-}
-
-/** Insert payload for a quest event. */
-interface QuestEventInput {
-  questId: number;
-  projectId: number;
-  type: QuestEventType;
-  payload: unknown;
-  actorUserId: number | null;
-  familiarId?: number | null;
-  createdAt: number;
 }
 
 /** The authenticated user of a request (the `authenticate` preHandler ran). */
@@ -200,16 +209,143 @@ function loadTagNamesByQuest(
   return result;
 }
 
-/**
- * Serialize a quest row plus its tag names into a board card.
- *
- * Party, floor progress, pending nomination counts and the bounty are computed
- * live (M2). Until the party and floor read models land, the list emits empty
- * scaffolding values.
- */
+/** Active party summaries of every quest, keyed by quest id (no N+1). */
+function loadActivePartySummaries(
+  db: AppDb,
+  questIds: number[],
+): Map<number, PartySummary[]> {
+  const result = new Map<number, PartySummary[]>();
+  if (questIds.length === 0) {
+    return result;
+  }
+
+  const rows = db
+    .select({
+      questId: partyMembers.questId,
+      userId: partyMembers.userId,
+      displayName: users.displayName,
+      role: partyMembers.role,
+      status: partyMembers.status,
+      joinedAt: partyMembers.joinedAt,
+    })
+    .from(partyMembers)
+    .innerJoin(users, eq(partyMembers.userId, users.id))
+    .where(
+      and(
+        inArray(partyMembers.questId, questIds),
+        ne(partyMembers.status, "retreated"),
+      ),
+    )
+    .all();
+
+  // Leader first, then by join order, matching the detail read model.
+  rows.sort((left, right) => {
+    if (left.questId !== right.questId) {
+      return left.questId - right.questId;
+    }
+    if (left.role !== right.role) {
+      return left.role === "leader" ? -1 : 1;
+    }
+    if (left.joinedAt !== right.joinedAt) {
+      return left.joinedAt - right.joinedAt;
+    }
+    return left.userId - right.userId;
+  });
+
+  for (const row of rows) {
+    const party = result.get(row.questId) ?? [];
+    party.push({
+      userId: row.userId,
+      displayName: row.displayName,
+      role: row.role,
+      status: row.status,
+    });
+    result.set(row.questId, party);
+  }
+  return result;
+}
+
+/** Floor progress (`done`/`total`) of every quest, keyed by quest id. */
+function loadFloorCounts(
+  db: AppDb,
+  questIds: number[],
+): Map<number, { done: number; total: number }> {
+  const result = new Map<number, { done: number; total: number }>();
+  if (questIds.length === 0) {
+    return result;
+  }
+
+  const rows = db
+    .select({
+      questId: questFloors.questId,
+      total: sql<number>`count(*)`,
+      done: sql<number>`sum(case when ${questFloors.doneAt} is null then 0 else 1 end)`,
+    })
+    .from(questFloors)
+    .where(inArray(questFloors.questId, questIds))
+    .groupBy(questFloors.questId)
+    .all();
+
+  for (const row of rows) {
+    result.set(row.questId, {
+      done: Number(row.done),
+      total: Number(row.total),
+    });
+  }
+  return result;
+}
+
+/** Number of pending nominations per quest, keyed by quest id. */
+function loadPendingNominationCounts(
+  db: AppDb,
+  questIds: number[],
+): Map<number, number> {
+  const result = new Map<number, number>();
+  if (questIds.length === 0) {
+    return result;
+  }
+
+  const rows = db
+    .select({
+      questId: questNominations.questId,
+      total: sql<number>`count(*)`,
+    })
+    .from(questNominations)
+    .where(
+      and(
+        inArray(questNominations.questId, questIds),
+        eq(questNominations.state, "pending"),
+      ),
+    )
+    .groupBy(questNominations.questId)
+    .all();
+
+  for (const row of rows) {
+    result.set(row.questId, Number(row.total));
+  }
+  return result;
+}
+
+/** Summary-only extras: the data a board card needs beyond the quest row. */
+interface QuestSummaryExtras {
+  party: PartySummary[];
+  floors: { done: number; total: number };
+  pendingNominations: number;
+}
+
+/** Detail-only extras: the full party, pending nominations and floors. */
+interface QuestDetailExtras {
+  party: PartyMember[];
+  nominations: Nomination[];
+  floors: Floor[];
+}
+
+/** Serialize a quest row plus its tag names and live board data. */
 function toQuestSummary(
   entry: QuestWithCreator,
   tagNames: string[],
+  extras: QuestSummaryExtras,
+  now: number,
 ): QuestSummary {
   return {
     id: entry.quest.id,
@@ -225,40 +361,181 @@ function toQuestSummary(
     },
     createdAt: entry.quest.createdAt,
     updatedAt: entry.quest.updatedAt,
-    party: [],
-    floors: { done: 0, total: 0 },
-    pendingNominations: 0,
+    party: extras.party,
+    floors: extras.floors,
+    pendingNominations: extras.pendingNominations,
     bounty: computeBounty({
       rank: entry.quest.rank,
       createdAt: entry.quest.createdAt,
       firstClaimedAt: entry.quest.firstClaimedAt,
-      now: Date.now(),
+      now,
     }),
   };
 }
 
-/**
- * Serialize a quest row plus tags/creator into the full detail shape.
- *
- * Detail-only party, nomination and floor collections are empty scaffolding
- * here; the party/floor tasks replace them with the real read model.
- */
-function toQuest(entry: QuestWithCreator, tagNames: string[]): Quest {
+/** Serialize a quest row plus its full detail collections. */
+function toQuest(
+  entry: QuestWithCreator,
+  tagNames: string[],
+  detail: QuestDetailExtras,
+  now: number,
+): Quest {
+  const activeParty: PartySummary[] = detail.party
+    .filter((member) => member.status !== "retreated")
+    .map((member) => ({
+      userId: member.user.id,
+      displayName: member.user.displayName,
+      role: member.role,
+      status: member.status,
+    }));
+  const doneFloors = detail.floors.filter(
+    (floor) => floor.doneAt !== null,
+  ).length;
+
+  const summary = toQuestSummary(
+    entry,
+    tagNames,
+    {
+      party: activeParty,
+      floors: { done: doneFloors, total: detail.floors.length },
+      pendingNominations: detail.nominations.length,
+    },
+    now,
+  );
+
   return {
-    ...toQuestSummary(entry, tagNames),
+    ...summary,
     projectId: entry.quest.projectId,
     situation: entry.quest.situation,
     direction: entry.quest.direction,
     archiveReason: entry.quest.archiveReason,
-    party: [],
-    nominations: [],
-    floors: [],
+    party: detail.party,
+    nominations: detail.nominations,
+    floors: detail.floors,
     firstClaimedAt: entry.quest.firstClaimedAt,
   };
 }
 
+/** A `{id, displayName}` reference for a user id present in `byId`. */
+function userRef(byId: Map<number, UserRow>, userId: number): UserRef {
+  const user = byId.get(userId);
+  return {
+    id: userId,
+    displayName: user?.displayName ?? "알 수 없는 모험가",
+  };
+}
+
+/** All party rows of a quest (retreated included), leader first. */
+function loadQuestParty(db: AppDb, questId: number): PartyMember[] {
+  return db
+    .select({ member: partyMembers, user: users })
+    .from(partyMembers)
+    .innerJoin(users, eq(partyMembers.userId, users.id))
+    .where(eq(partyMembers.questId, questId))
+    .all()
+    .sort((left, right) => {
+      if (left.member.role !== right.member.role) {
+        return left.member.role === "leader" ? -1 : 1;
+      }
+      if (left.member.joinedAt !== right.member.joinedAt) {
+        return left.member.joinedAt - right.member.joinedAt;
+      }
+      return left.member.userId - right.member.userId;
+    })
+    .map(({ member, user }) => ({
+      user: { id: user.id, displayName: user.displayName },
+      role: member.role,
+      status: member.status,
+      retreatReason: member.retreatReason,
+      joinedAt: member.joinedAt,
+    }));
+}
+
+/** The quest's pending nominations with both user references resolved. */
+function loadPendingNominations(db: AppDb, questId: number): Nomination[] {
+  const rows = db
+    .select()
+    .from(questNominations)
+    .where(
+      and(
+        eq(questNominations.questId, questId),
+        eq(questNominations.state, "pending"),
+      ),
+    )
+    .orderBy(asc(questNominations.createdAt), asc(questNominations.id))
+    .all();
+  if (rows.length === 0) {
+    return [];
+  }
+
+  return toNominations(db, rows, new Map<number, UserRow>());
+}
+
+/**
+ * Map nomination rows to the API shape, resolving nominee/nominator names in
+ * one batch. `knownUsers` may pre-seed names the caller already loaded.
+ */
+function toNominations(
+  db: AppDb,
+  rows: QuestNominationRow[],
+  knownUsers: Map<number, UserRow>,
+): Nomination[] {
+  const userIds = new Set<number>();
+  for (const row of rows) {
+    if (!knownUsers.has(row.nomineeId)) {
+      userIds.add(row.nomineeId);
+    }
+    if (!knownUsers.has(row.nominatedBy)) {
+      userIds.add(row.nominatedBy);
+    }
+  }
+
+  const byId = new Map(knownUsers);
+  if (userIds.size > 0) {
+    const loaded = db
+      .select()
+      .from(users)
+      .where(inArray(users.id, [...userIds]))
+      .all();
+    for (const user of loaded) {
+      byId.set(user.id, user);
+    }
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    questId: row.questId,
+    nominee: userRef(byId, row.nomineeId),
+    nominatedBy: userRef(byId, row.nominatedBy),
+    kind: row.kind,
+    state: row.state,
+    passReason: row.passReason,
+    createdAt: row.createdAt,
+  }));
+}
+
+/** The quest's floors ordered by `order_key`, with `doneBy` refs. */
+function loadQuestFloors(db: AppDb, questId: number): Floor[] {
+  return db
+    .select({ floor: questFloors, doneBy: users })
+    .from(questFloors)
+    .leftJoin(users, eq(questFloors.doneBy, users.id))
+    .where(eq(questFloors.questId, questId))
+    .orderBy(asc(questFloors.orderKey), asc(questFloors.id))
+    .all()
+    .map(({ floor, doneBy }) => ({
+      id: floor.id,
+      title: floor.title,
+      orderKey: floor.orderKey,
+      doneAt: floor.doneAt,
+      doneBy: doneBy
+        ? { id: doneBy.id, displayName: doneBy.displayName }
+        : null,
+    }));
+}
+
 /** Load the full `Quest` representation of `questId`. */
-function loadQuestView(db: AppDb, questId: number): Quest {
+export function loadQuestView(db: AppDb, questId: number): Quest {
   const entry = db
     .select({ quest: quests, creator: users })
     .from(quests)
@@ -269,7 +546,16 @@ function loadQuestView(db: AppDb, questId: number): Quest {
     throw new HttpError(404, "NOT_FOUND", "Quest not found");
   }
   const tagNames = loadTagNamesByQuest(db, [questId]).get(questId) ?? [];
-  return toQuest(entry, tagNames);
+  return toQuest(
+    entry,
+    tagNames,
+    {
+      party: loadQuestParty(db, questId),
+      nominations: loadPendingNominations(db, questId),
+      floors: loadQuestFloors(db, questId),
+    },
+    Date.now(),
+  );
 }
 
 /** Fetch an existing project tag or create it in the project. */
@@ -316,26 +602,6 @@ function lastOrderKey(
     .limit(1)
     .get();
   return row?.orderKey ?? null;
-}
-
-/** Order key that appends a card at the bottom of `stage`. */
-function bottomOrderKey(db: AppDb, projectId: number, stage: Stage): string {
-  return generateKeyBetween(lastOrderKey(db, projectId, stage), null);
-}
-
-/** Append a quest event row. */
-function insertQuestEvent(db: AppDb, input: QuestEventInput): void {
-  db.insert(questEvents)
-    .values({
-      questId: input.questId,
-      projectId: input.projectId,
-      type: input.type,
-      payload: JSON.stringify(input.payload),
-      actorUserId: input.actorUserId,
-      familiarId: input.familiarId ?? null,
-      createdAt: input.createdAt,
-    })
-    .run();
 }
 
 /** Parse the stage query parameter into a validated stage list. */
@@ -415,8 +681,25 @@ function listProjectQuests(
     db,
     rows.map((row) => row.quest.id),
   );
+  // Live board data is batch-loaded once for the whole page: party, floor
+  // progress and pending nomination counts never issue per-quest queries.
+  const questIds = rows.map((row) => row.quest.id);
+  const partyByQuest = loadActivePartySummaries(db, questIds);
+  const floorsByQuest = loadFloorCounts(db, questIds);
+  const pendingByQuest = loadPendingNominationCounts(db, questIds);
+  const now = Date.now();
+
   return rows.map((row) =>
-    toQuestSummary(row, tagNames.get(row.quest.id) ?? []),
+    toQuestSummary(
+      row,
+      tagNames.get(row.quest.id) ?? [],
+      {
+        party: partyByQuest.get(row.quest.id) ?? [],
+        floors: floorsByQuest.get(row.quest.id) ?? { done: 0, total: 0 },
+        pendingNominations: pendingByQuest.get(row.quest.id) ?? 0,
+      },
+      now,
+    ),
   );
 }
 
@@ -476,7 +759,12 @@ function createQuest(
       createdAt: now,
     });
 
-    return toQuest({ quest: row, creator: actor }, tagNames);
+    return toQuest(
+      { quest: row, creator: actor },
+      tagNames,
+      { party: [], nominations: [], floors: [] },
+      now,
+    );
   });
 }
 
@@ -551,7 +839,14 @@ function bulkCreateQuests(
         createdAt: now,
       });
 
-      created.push(toQuest({ quest: row, creator: actor }, []));
+      created.push(
+        toQuest(
+          { quest: row, creator: actor },
+          [],
+          { party: [], nominations: [], floors: [] },
+          now,
+        ),
+      );
       number += 1;
     }
 
