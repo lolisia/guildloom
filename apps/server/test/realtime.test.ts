@@ -130,6 +130,31 @@ function waitForEvent<T>(socket: Socket, event: string): Promise<T> {
   });
 }
 
+/** Resolve with the first payload of `event` that satisfies `predicate`. */
+function waitForMatchingEvent<T>(
+  socket: Socket,
+  event: string,
+  predicate: (payload: T) => boolean,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`timed out waiting for ${event}`)),
+      EVENT_TIMEOUT_MS,
+    );
+
+    const listener = (payload: T) => {
+      if (!predicate(payload)) {
+        return;
+      }
+      clearTimeout(timer);
+      socket.off(event, listener);
+      resolve(payload);
+    };
+
+    socket.on(event, listener);
+  });
+}
+
 /** Subscribe to a project room and return the server ack. */
 function subscribe(
   socket: Socket,
@@ -352,7 +377,7 @@ describe("realtime", () => {
     }
   });
 
-  it("broadcasts quest:changed after patch, stage moves and archive", async () => {
+  it("broadcasts quest:changed after patch, every move and archive", async () => {
     const running = await startRealtimeApp();
     const { app, db } = running;
     const owner = createUser(db, { loginId: "owner" });
@@ -409,12 +434,49 @@ describe("realtime", () => {
         payload: { stage: "dungeon" },
       });
       expect(moveResponse.statusCode).toBe(200);
+      const dungeonOrderKey = moveResponse.json<{ orderKey: string }>().orderKey;
       await expect(moved).resolves.toEqual({
         projectId: project.id,
         questId,
       });
 
-      // Reordering inside the same stage is not a stage change: no broadcast.
+      // A second card gives the reorder a real neighbour: moving it above the
+      // first one is a stage-changing move and broadcasts exactly once.
+      const secondCreated = waitForEvent<QuestChangedEvent>(
+        socket,
+        "quest:changed",
+      );
+      const secondCreateResponse = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/quests`,
+        headers: { cookie: ownerCookie },
+        payload: { title: "두 번째 방송 테스트" },
+      });
+      expect(secondCreateResponse.statusCode).toBe(201);
+      const secondQuestId = secondCreateResponse.json<{ id: number }>().id;
+      await expect(secondCreated).resolves.toEqual({
+        projectId: project.id,
+        questId: secondQuestId,
+      });
+
+      const secondMoved = waitForEvent<QuestChangedEvent>(
+        socket,
+        "quest:changed",
+      );
+      const secondMoveResponse = await app.inject({
+        method: "POST",
+        url: `/api/quests/${secondQuestId}/move`,
+        headers: { cookie: ownerCookie },
+        payload: { stage: "dungeon", afterId: questId },
+      });
+      expect(secondMoveResponse.statusCode).toBe(200);
+      await expect(secondMoved).resolves.toEqual({
+        projectId: project.id,
+        questId: secondQuestId,
+      });
+
+      // Reordering inside a stage only rewrites `order_key`, yet the other
+      // clients' boards still have to learn the new card order.
       const sameStageEvents: QuestChangedEvent[] = [];
       const collect = (payload: QuestChangedEvent) => {
         sameStageEvents.push(payload);
@@ -425,29 +487,41 @@ describe("realtime", () => {
         method: "POST",
         url: `/api/quests/${questId}/move`,
         headers: { cookie: ownerCookie },
-        payload: { stage: "dungeon" },
+        payload: { stage: "dungeon", afterId: secondQuestId },
       });
       expect(sameStageResponse.statusCode).toBe(200);
+      const reordered = sameStageResponse.json<{
+        stage: string;
+        orderKey: string;
+      }>();
+      expect(reordered.stage).toBe("dungeon");
+      expect(reordered.orderKey).not.toBe(dungeonOrderKey);
 
-      // Keep collecting across the archive below: its broadcast proves the
-      // socket pipeline is live, and Socket.IO preserves packet order, so the
-      // reorder has either broadcast before the archive (two events) or not at
-      // all. That is stronger than sleeping and asserting an empty array.
-      const archived = waitForEvent<QuestChangedEvent>(socket, "quest:changed");
+      // Keep collecting across the archive of the *other* quest: its broadcast
+      // proves the socket pipeline is live, and Socket.IO preserves packet
+      // order, so a duplicated reorder emission would arrive as a third event.
+      const archived = waitForMatchingEvent<QuestChangedEvent>(
+        socket,
+        "quest:changed",
+        (event) => event.questId === secondQuestId,
+      );
       const archiveResponse = await app.inject({
         method: "POST",
-        url: `/api/quests/${questId}/archive`,
+        url: `/api/quests/${secondQuestId}/archive`,
         headers: { cookie: ownerCookie },
         payload: {},
       });
       expect(archiveResponse.statusCode).toBe(200);
       await expect(archived).resolves.toEqual({
         projectId: project.id,
-        questId,
+        questId: secondQuestId,
       });
 
       socket.off("quest:changed", collect);
-      expect(sameStageEvents).toEqual([{ projectId: project.id, questId }]);
+      expect(sameStageEvents).toEqual([
+        { projectId: project.id, questId },
+        { projectId: project.id, questId: secondQuestId },
+      ]);
 
       // Bulk creation broadcasts once per created quest.
       const bulkEvents: QuestChangedEvent[] = [];
@@ -476,6 +550,104 @@ describe("realtime", () => {
       );
       expect(bulkEvents.map((event) => event.questId).sort((a, b) => a - b))
         .toEqual(bulkCreated.map((quest) => quest.id).sort((a, b) => a - b));
+    } finally {
+      socket.close();
+      await running.close();
+    }
+  });
+
+  it("broadcasts exactly one quest:changed when a move settles a clear", async () => {
+    const running = await startRealtimeApp();
+    const { app, db } = running;
+    const owner = createUser(db, { loginId: "owner" });
+    const member = createUser(db, { loginId: "member" });
+    const project = createProject(db, { ownerId: owner.id });
+    addMember(db, project.id, member.id);
+    const ownerCookie = createSessionCookie(db, owner.id);
+
+    const socket = connectClient(running.url, {
+      cookie: createSessionCookie(db, member.id),
+    });
+
+    try {
+      await waitForConnect(socket);
+      await expect(subscribe(socket, project.id)).resolves.toEqual({
+        ok: true,
+      });
+
+      const created = waitForEvent<QuestChangedEvent>(socket, "quest:changed");
+      const createResponse = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/quests`,
+        headers: { cookie: ownerCookie },
+        payload: { title: "클리어 방송" },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const questId = createResponse.json<{ id: number }>().id;
+      await expect(created).resolves.toEqual({
+        projectId: project.id,
+        questId,
+      });
+
+      // A second quest is the ordered barrier for the archive below.
+      const barrierCreated = waitForEvent<QuestChangedEvent>(
+        socket,
+        "quest:changed",
+      );
+      const barrierResponse = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/quests`,
+        headers: { cookie: ownerCookie },
+        payload: { title: "정산 방송 장벽" },
+      });
+      expect(barrierResponse.statusCode).toBe(201);
+      const barrierQuestId = barrierResponse.json<{ id: number }>().id;
+      await expect(barrierCreated).resolves.toEqual({
+        projectId: project.id,
+        questId: barrierQuestId,
+      });
+
+      // Count the broadcasts of the settling move itself; the settlement path
+      // owns that emission, so the route must not add a second one.
+      const clearedEvents: QuestChangedEvent[] = [];
+      const collect = (payload: QuestChangedEvent) => {
+        clearedEvents.push(payload);
+      };
+      socket.on("quest:changed", collect);
+
+      const cleared = await app.inject({
+        method: "POST",
+        url: `/api/quests/${questId}/move`,
+        headers: { cookie: ownerCookie },
+        payload: { stage: "cleared" },
+      });
+      expect(cleared.statusCode).toBe(200);
+      expect(cleared.json<{ stage: string }>().stage).toBe("cleared");
+
+      // Archive the barrier quest: its broadcast arrives after the settle
+      // emission, so a duplicate quest:changed would show up in between.
+      const barrierArchived = waitForMatchingEvent<QuestChangedEvent>(
+        socket,
+        "quest:changed",
+        (event) => event.questId === barrierQuestId,
+      );
+      const archiveResponse = await app.inject({
+        method: "POST",
+        url: `/api/quests/${barrierQuestId}/archive`,
+        headers: { cookie: ownerCookie },
+        payload: {},
+      });
+      expect(archiveResponse.statusCode).toBe(200);
+      await expect(barrierArchived).resolves.toEqual({
+        projectId: project.id,
+        questId: barrierQuestId,
+      });
+
+      socket.off("quest:changed", collect);
+      expect(clearedEvents).toEqual([
+        { projectId: project.id, questId },
+        { projectId: project.id, questId: barrierQuestId },
+      ]);
     } finally {
       socket.close();
       await running.close();

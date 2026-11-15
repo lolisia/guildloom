@@ -1020,10 +1020,9 @@ function neighborOrderKey(
   return neighbor.orderKey;
 }
 
-/** Result of a move: the reloaded quest, its stage change and any settlement. */
+/** Result of a move: the reloaded quest and any settlement it produced. */
 interface MoveQuestResult {
   quest: Quest;
-  stageChanged: boolean;
   /** Set when the move targeted `cleared` and ran the clear settlement. */
   settlement: ClearSettlement | null;
 }
@@ -1088,10 +1087,7 @@ function moveQuest(
     if (targetStage === "cleared") {
       // `settleClear` writes the stage/order key together with the ledger,
       // event and inbox rows, all inside this transaction.
-      return {
-        stageChanged,
-        settlement: settleClear(tx, quest, actor, now, orderKey),
-      };
+      return { settlement: settleClear(tx, quest, actor, now, orderKey) };
     }
 
     tx.update(quests)
@@ -1103,7 +1099,7 @@ function moveQuest(
       .where(eq(quests.id, quest.id))
       .run();
 
-    return { stageChanged, settlement: null };
+    return { settlement: null };
   });
 
   return { quest: loadQuestView(db, questId), ...outcome };
@@ -1416,20 +1412,24 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      const { quest, stageChanged, settlement } = moveQuest(
+      const { quest, settlement } = moveQuest(
         request.server.db,
         request.params.id,
         user,
         request.body,
       );
       if (settlement) {
+        // The settlement path emits its own single `quest:changed`; emitting
+        // here as well would double-broadcast a move into `cleared`.
         emitSettlement(
           request.server.realtime,
           quest.projectId,
           quest.id,
           settlement,
         );
-      } else if (stageChanged) {
+      } else {
+        // Every other move rewrites the card's stage and/or order key (a
+        // same-stage reorder included), so the room always has to refresh.
         request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
       }
       return quest;
