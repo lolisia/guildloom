@@ -15,6 +15,13 @@
       "when": 1794701748532,
       "tag": "0001_worried_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794740278176,
+      "tag": "0002_cooing_switch",
+      "breakpoints": true
     }
   ]
 }

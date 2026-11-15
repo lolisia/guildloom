@@ -19,18 +19,23 @@ import {
   bulkCreateQuestsRequestSchema,
   clearQuestResponseSchema,
   computeBounty,
+  createQuestRefRequestSchema,
   createQuestRequestSchema,
   listQuestsQuerySchema,
   moveQuestRequestSchema,
+  parseChecklist,
   questEventsResponseSchema,
   questListResponseSchema,
+  questRefSchema,
   questSchema,
+  questSummarySchema,
+  refKind,
   retryQuestRequestSchema,
   updateQuestRequestSchema,
   type ArchiveQuestRequest,
   type BulkCreateQuestsRequest,
+  type CreateQuestRefRequest,
   type CreateQuestRequest,
-  type Floor,
   type ListQuestsQuery,
   type MoveQuestRequest,
   type Nomination,
@@ -40,6 +45,7 @@ import {
   type QuestEditableField,
   type QuestEvent,
   type QuestEventType,
+  type QuestRef,
   type QuestSummary,
   type RetryQuestRequest,
   type Stage,
@@ -64,8 +70,8 @@ import {
   partyMembers,
   projects,
   questEvents,
-  questFloors,
   questNominations,
+  questRefs,
   questTags,
   quests,
   tags,
@@ -93,6 +99,9 @@ const projectParamsSchema = z.object({
   pid: z.coerce.number().int().positive(),
 });
 const questParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+const refParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
@@ -320,34 +329,23 @@ function loadActivePartySummaries(
   return result;
 }
 
-/** Floor progress (`done`/`total`) of every quest, keyed by quest id. */
-function loadFloorCounts(
-  db: AppDb,
-  questIds: number[],
-): Map<number, { done: number; total: number }> {
-  const result = new Map<number, { done: number; total: number }>();
-  if (questIds.length === 0) {
-    return result;
-  }
-
-  const rows = db
-    .select({
-      questId: questFloors.questId,
-      total: sql<number>`count(*)`,
-      done: sql<number>`sum(case when ${questFloors.doneAt} is null then 0 else 1 end)`,
-    })
-    .from(questFloors)
-    .where(inArray(questFloors.questId, questIds))
-    .groupBy(questFloors.questId)
-    .all();
-
-  for (const row of rows) {
-    result.set(row.questId, {
-      done: Number(row.done),
-      total: Number(row.total),
-    });
-  }
-  return result;
+/** Reference documents of a quest, ordered by id (oldest first). */
+function loadQuestRefs(db: AppDb, questId: number): QuestRef[] {
+  return db
+    .select({ ref: questRefs, creator: users })
+    .from(questRefs)
+    .innerJoin(users, eq(questRefs.createdBy, users.id))
+    .where(eq(questRefs.questId, questId))
+    .orderBy(asc(questRefs.id))
+    .all()
+    .map(({ ref, creator }) => ({
+      id: ref.id,
+      label: ref.label,
+      target: ref.target,
+      kind: refKind(ref.target),
+      createdBy: { id: creator.id, displayName: creator.displayName },
+      createdAt: ref.createdAt,
+    }));
 }
 
 /** Number of pending nominations per quest, keyed by quest id. */
@@ -388,12 +386,38 @@ interface QuestSummaryExtras {
   pendingNominations: number;
 }
 
-/** Detail-only extras: the full party, pending nominations and floors. */
+/** Detail-only extras: the full party, pending nominations and references. */
 interface QuestDetailExtras {
   party: PartyMember[];
   nominations: Nomination[];
-  floors: Floor[];
+  refs: QuestRef[];
 }
+
+/**
+ * The quest detail exposed by the quest routes.
+ *
+ * The checklist progress replaces the deprecated floor rows: both the board
+ * summary and the detail report `{ done, total }` parsed from `direction`.
+ */
+export type QuestDetail = Omit<Quest, "floors"> & {
+  floors: { done: number; total: number };
+};
+
+/**
+ * Detail response schema of the quest routes.
+ *
+ * The shared `questSchema` still serializes the deprecated floor rows for the
+ * not-yet-migrated web client (T04 removes them together with the floor
+ * exports). This local override keeps the server contract on the checklist
+ * progress without editing the shared package.
+ */
+const questDetailResponseSchema = questSchema.extend({
+  floors: questSummarySchema.shape.floors,
+});
+const questDetailListResponseSchema = z.array(questDetailResponseSchema);
+const clearQuestDetailResponseSchema = clearQuestResponseSchema.extend({
+  quest: questDetailResponseSchema,
+});
 
 /** Serialize a quest row plus its tag names and live board data. */
 function toQuestSummary(
@@ -407,6 +431,7 @@ function toQuestSummary(
     number: entry.quest.number,
     title: entry.quest.title,
     stage: entry.quest.stage,
+    kind: entry.quest.kind,
     rank: entry.quest.rank,
     orderKey: entry.quest.orderKey,
     tags: sortNames(tagNames),
@@ -420,7 +445,6 @@ function toQuestSummary(
     floors: extras.floors,
     pendingNominations: extras.pendingNominations,
     bounty: computeBounty({
-      rank: entry.quest.rank,
       createdAt: entry.quest.createdAt,
       firstClaimedAt: entry.quest.firstClaimedAt,
       now,
@@ -434,7 +458,7 @@ function toQuest(
   tagNames: string[],
   detail: QuestDetailExtras,
   now: number,
-): Quest {
+): QuestDetail {
   const activeParty: PartySummary[] = detail.party
     .filter((member) => member.status !== "retreated")
     .map((member) => ({
@@ -443,16 +467,14 @@ function toQuest(
       role: member.role,
       status: member.status,
     }));
-  const doneFloors = detail.floors.filter(
-    (floor) => floor.doneAt !== null,
-  ).length;
+  const checklist = parseChecklist(entry.quest.direction);
 
   const summary = toQuestSummary(
     entry,
     tagNames,
     {
       party: activeParty,
-      floors: { done: doneFloors, total: detail.floors.length },
+      floors: { done: checklist.done, total: checklist.total },
       pendingNominations: detail.nominations.length,
     },
     now,
@@ -466,7 +488,7 @@ function toQuest(
     archiveReason: entry.quest.archiveReason,
     party: detail.party,
     nominations: detail.nominations,
-    floors: detail.floors,
+    refs: detail.refs,
     firstClaimedAt: entry.quest.firstClaimedAt,
   };
 }
@@ -569,28 +591,8 @@ function toNominations(
   }));
 }
 
-/** The quest's floors ordered by `order_key`, with `doneBy` refs. */
-function loadQuestFloors(db: AppDb, questId: number): Floor[] {
-  return db
-    .select({ floor: questFloors, doneBy: users })
-    .from(questFloors)
-    .leftJoin(users, eq(questFloors.doneBy, users.id))
-    .where(eq(questFloors.questId, questId))
-    .orderBy(asc(questFloors.orderKey), asc(questFloors.id))
-    .all()
-    .map(({ floor, doneBy }) => ({
-      id: floor.id,
-      title: floor.title,
-      orderKey: floor.orderKey,
-      doneAt: floor.doneAt,
-      doneBy: doneBy
-        ? { id: doneBy.id, displayName: doneBy.displayName }
-        : null,
-    }));
-}
-
-/** Load the full `Quest` representation of `questId`. */
-export function loadQuestView(db: AppDb, questId: number): Quest {
+/** Load the full `QuestDetail` representation of `questId`. */
+export function loadQuestDetail(db: AppDb, questId: number): QuestDetail {
   const entry = db
     .select({ quest: quests, creator: users })
     .from(quests)
@@ -607,10 +609,21 @@ export function loadQuestView(db: AppDb, questId: number): Quest {
     {
       party: loadQuestParty(db, questId),
       nominations: loadPendingNominations(db, questId),
-      floors: loadQuestFloors(db, questId),
+      refs: loadQuestRefs(db, questId),
     },
     Date.now(),
   );
+}
+
+/**
+ * Compatibility detail view for routes that still serialize the shared
+ * `questSchema` with its deprecated floor array (`routes/party.ts`). The floor
+ * rows no longer exist, so the field is always empty; T04 removes it and this
+ * wrapper together.
+ */
+export function loadQuestView(db: AppDb, questId: number): Quest {
+  const detail = loadQuestDetail(db, questId);
+  return { ...detail, floors: [] };
 }
 
 /** Fetch an existing project tag or create it in the project. */
@@ -736,26 +749,27 @@ function listProjectQuests(
     db,
     rows.map((row) => row.quest.id),
   );
-  // Live board data is batch-loaded once for the whole page: party, floor
-  // progress and pending nomination counts never issue per-quest queries.
+  // Live board data is batch-loaded once for the whole page: party and pending
+  // nomination counts never issue per-quest queries. Checklist progress is
+  // parsed from each row's direction.
   const questIds = rows.map((row) => row.quest.id);
   const partyByQuest = loadActivePartySummaries(db, questIds);
-  const floorsByQuest = loadFloorCounts(db, questIds);
   const pendingByQuest = loadPendingNominationCounts(db, questIds);
   const now = Date.now();
 
-  return rows.map((row) =>
-    toQuestSummary(
+  return rows.map((row) => {
+    const checklist = parseChecklist(row.quest.direction);
+    return toQuestSummary(
       row,
       tagNames.get(row.quest.id) ?? [],
       {
         party: partyByQuest.get(row.quest.id) ?? [],
-        floors: floorsByQuest.get(row.quest.id) ?? { done: 0, total: 0 },
+        floors: { done: checklist.done, total: checklist.total },
         pendingNominations: pendingByQuest.get(row.quest.id) ?? 0,
       },
       now,
-    ),
-  );
+    );
+  });
 }
 
 /** Create one quest plus its `quest_posted` event inside a transaction. */
@@ -764,7 +778,7 @@ function createQuest(
   projectId: number,
   actor: UserRow,
   body: CreateQuestRequest,
-): Quest {
+): QuestDetail {
   return db.transaction((tx) => {
     const project = tx
       .select()
@@ -795,6 +809,7 @@ function createQuest(
         situation: body.situation ?? "",
         direction: body.direction ?? "",
         stage: "board",
+        kind: body.kind ?? "fix",
         rank: body.rank ?? null,
         orderKey,
         createdBy: actor.id,
@@ -817,7 +832,7 @@ function createQuest(
     return toQuest(
       { quest: row, creator: actor },
       tagNames,
-      { party: [], nominations: [], floors: [] },
+      { party: [], nominations: [], refs: [] },
       now,
     );
   });
@@ -829,7 +844,7 @@ function bulkCreateQuests(
   projectId: number,
   actor: UserRow,
   body: BulkCreateQuestsRequest,
-): Quest[] {
+): QuestDetail[] {
   const titles = body.titles
     .map((title) => title.trim())
     .filter((title) => title.length > 0);
@@ -861,7 +876,7 @@ function bulkCreateQuests(
     const now = Date.now();
     let number = project.nextQuestNumber;
     let previousKey = lastOrderKey(tx, projectId, "board");
-    const created: Quest[] = [];
+    const created: QuestDetail[] = [];
 
     for (const title of titles) {
       const orderKey = generateKeyBetween(previousKey, null);
@@ -876,6 +891,7 @@ function bulkCreateQuests(
           situation: "",
           direction: "",
           stage: "board",
+          kind: "fix",
           rank: null,
           orderKey,
           createdBy: actor.id,
@@ -898,7 +914,7 @@ function bulkCreateQuests(
         toQuest(
           { quest: row, creator: actor },
           [],
-          { party: [], nominations: [], floors: [] },
+          { party: [], nominations: [], refs: [] },
           now,
         ),
       );
@@ -920,7 +936,7 @@ function updateQuestDetails(
   questId: number,
   actor: UserRow,
   body: UpdateQuestRequest,
-): Quest {
+): QuestDetail {
   db.transaction((tx) => {
     const quest = requireQuest(tx, questId, actor.id);
     const changes: Partial<typeof quests.$inferInsert> = {};
@@ -955,6 +971,10 @@ function updateQuestDetails(
       changes.rank = body.rank;
       changed.push("rank");
     }
+    if (body.kind !== undefined && body.kind !== quest.kind) {
+      changes.kind = body.kind;
+      changed.push("kind");
+    }
 
     const fields = QUEST_EDITABLE_FIELDS.filter((field) =>
       changed.includes(field),
@@ -983,7 +1003,7 @@ function updateQuestDetails(
     });
   });
 
-  return loadQuestView(db, questId);
+  return loadQuestDetail(db, questId);
 }
 
 /** Load the order key of a move target neighbor, validating project and stage. */
@@ -1022,7 +1042,7 @@ function neighborOrderKey(
 
 /** Result of a move: the reloaded quest and any settlement it produced. */
 interface MoveQuestResult {
-  quest: Quest;
+  quest: QuestDetail;
   /** Set when the move targeted `cleared` and ran the clear settlement. */
   settlement: ClearSettlement | null;
 }
@@ -1102,7 +1122,7 @@ function moveQuest(
     return { settlement: null };
   });
 
-  return { quest: loadQuestView(db, questId), ...outcome };
+  return { quest: loadQuestDetail(db, questId), ...outcome };
 }
 
 /** Realtime work produced by a retry after its transaction committed. */
@@ -1231,7 +1251,7 @@ function archiveQuest(
   questId: number,
   actor: UserRow,
   body: ArchiveQuestRequest,
-): Quest {
+): QuestDetail {
   db.transaction((tx) => {
     const quest = requireQuest(tx, questId, actor.id);
     const now = Date.now();
@@ -1257,7 +1277,110 @@ function archiveQuest(
     }
   });
 
-  return loadQuestView(db, questId);
+  return loadQuestDetail(db, questId);
+}
+
+/** Normalize an optional reference label: trimmed, blank becomes `null`. */
+function normalizeRefLabel(label: string | undefined): string | null {
+  if (label === undefined) {
+    return null;
+  }
+  const trimmed = label.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** Realtime work produced by a reference mutation. */
+interface QuestRefSignals {
+  projectId: number;
+  questId: number;
+}
+
+/**
+ * Add a reference document and its `ref_added` event in one transaction.
+ *
+ * Only guild members reach this function (`requireQuest`); the caller emits
+ * `quest:changed` after the transaction committed.
+ */
+function createQuestRef(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  body: CreateQuestRefRequest,
+): { ref: QuestRef; signals: QuestRefSignals } {
+  return db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    const now = Date.now();
+    const target = body.target.trim();
+    const label = normalizeRefLabel(body.label);
+
+    const row = tx
+      .insert(questRefs)
+      .values({
+        questId: quest.id,
+        label,
+        target,
+        createdBy: actor.id,
+        createdAt: now,
+      })
+      .returning()
+      .get();
+
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "ref_added",
+      payload: { refId: row.id, target, label },
+      actorUserId: actor.id,
+      createdAt: now,
+    });
+
+    return {
+      ref: {
+        id: row.id,
+        label: row.label,
+        target: row.target,
+        kind: refKind(row.target),
+        createdBy: { id: actor.id, displayName: actor.displayName },
+        createdAt: row.createdAt,
+      } satisfies QuestRef,
+      signals: { projectId: quest.projectId, questId: quest.id },
+    };
+  });
+}
+
+/**
+ * Remove a reference document and record `ref_removed`.
+ *
+ * Missing references are a 404; non-members of the owning guild are a 403.
+ */
+function deleteQuestRef(
+  db: AppDb,
+  refId: number,
+  actor: UserRow,
+): QuestRefSignals {
+  return db.transaction((tx) => {
+    const row = tx
+      .select()
+      .from(questRefs)
+      .where(eq(questRefs.id, refId))
+      .get();
+    if (!row) {
+      throw new HttpError(404, "NOT_FOUND", "Reference not found");
+    }
+
+    const quest = requireQuest(tx, row.questId, actor.id);
+    tx.delete(questRefs).where(eq(questRefs.id, row.id)).run();
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "ref_removed",
+      payload: { target: row.target, label: row.label },
+      actorUserId: actor.id,
+      createdAt: Date.now(),
+    });
+
+    return { projectId: quest.projectId, questId: quest.id };
+  });
 }
 
 /** Map `quest_events` rows (with their actor) to the API shape. */
@@ -1318,7 +1441,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: projectParamsSchema,
         body: createQuestRequestSchema,
-        response: { 201: questSchema },
+        response: { 201: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1339,7 +1462,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: projectParamsSchema,
         body: bulkCreateQuestsRequestSchema,
-        response: { 201: z.array(questSchema) },
+        response: { 201: questDetailListResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1366,14 +1489,14 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         params: questParamsSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
     async (request) => {
       const user = currentUser(request);
       const quest = requireQuest(request.server.db, request.params.id, user.id);
-      return loadQuestView(request.server.db, quest.id);
+      return loadQuestDetail(request.server.db, quest.id);
     },
   );
 
@@ -1383,7 +1506,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: updateQuestRequestSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1406,7 +1529,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: moveQuestRequestSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1441,7 +1564,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         params: questParamsSchema,
-        response: { 200: clearQuestResponseSchema },
+        response: { 200: clearQuestDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1458,7 +1581,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       );
 
       return {
-        quest: loadQuestView(db, result.questId),
+        quest: loadQuestDetail(db, result.questId),
         rewards: result.settlement.rewards,
         levelUps: result.settlement.levelUps,
       };
@@ -1471,7 +1594,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: retryQuestRequestSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1493,7 +1616,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       emitNotifications(request.server.realtime, result.notifications);
       request.server.realtime.emitMembersChanged(result.projectId);
 
-      return loadQuestView(db, result.questId);
+      return loadQuestDetail(db, result.questId);
     },
   );
 
@@ -1503,7 +1626,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: archiveQuestRequestSchema.optional(),
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1517,6 +1640,55 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       );
       request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
       return quest;
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/refs",
+    {
+      schema: {
+        params: questParamsSchema,
+        body: createQuestRefRequestSchema,
+        response: { 201: questRefSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request, reply) => {
+      const user = currentUser(request);
+      const { ref, signals } = createQuestRef(
+        request.server.db,
+        request.params.id,
+        user,
+        request.body,
+      );
+      request.server.realtime.emitQuestChanged(
+        signals.projectId,
+        signals.questId,
+      );
+      reply.code(201);
+      return ref;
+    },
+  );
+
+  app.delete(
+    "/api/refs/:id",
+    {
+      schema: { params: refParamsSchema },
+      preHandler: authenticate,
+    },
+    async (request, reply) => {
+      const user = currentUser(request);
+      const signals = deleteQuestRef(
+        request.server.db,
+        request.params.id,
+        user,
+      );
+      request.server.realtime.emitQuestChanged(
+        signals.projectId,
+        signals.questId,
+      );
+      reply.code(204);
+      return reply.send();
     },
   );
 

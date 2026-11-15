@@ -18,6 +18,7 @@ import {
   NOMINATION_STATES,
   NOTIFICATION_TYPES,
   PARTY_ROLES,
+  QUEST_KINDS,
   RANKS,
   STAGES,
   XP_REASONS,
@@ -117,7 +118,11 @@ export const quests = sqliteTable(
     situation: text("situation").notNull().default(""),
     direction: text("direction").notNull().default(""),
     stage: text("stage", { enum: STAGES }).notNull().default("board"),
+    // How the quest came in: a bug fix (default) or a new feature.
+    kind: text("kind", { enum: QUEST_KINDS }).notNull().default("fix"),
     rank: text("rank", { enum: RANKS }),
+    // Number of completed clear/reopen rounds; checklists use it for clearing.
+    clearRound: integer("clear_round").notNull().default(0),
     orderKey: text("order_key").notNull(),
     archiveReason: text("archive_reason"),
     createdBy: integer("created_by")
@@ -252,25 +257,23 @@ export const questNominations = sqliteTable(
   ],
 );
 
-/** Floors (층) of a quest's dungeon. Display only; they never move a quest. */
-export const questFloors = sqliteTable(
-  "quest_floors",
+/** Reference documents (참고 문서) attached to a quest. */
+export const questRefs = sqliteTable(
+  "quest_refs",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     questId: integer("quest_id")
       .notNull()
       .references(() => quests.id, { onDelete: "cascade" }),
-    title: text("title").notNull(),
-    orderKey: text("order_key").notNull(),
-    doneAt: integer("done_at", { mode: "number" }),
-    doneBy: integer("done_by").references(() => users.id),
+    label: text("label"),
+    target: text("target").notNull(),
     createdBy: integer("created_by")
       .notNull()
       .references(() => users.id),
     createdAt: integer("created_at", { mode: "number" }).notNull(),
   },
   (table) => [
-    index("quest_floors_quest_order_idx").on(table.questId, table.orderKey),
+    index("quest_refs_quest_id_id_idx").on(table.questId, table.id),
   ],
 );
 
@@ -327,6 +330,6 @@ export type QuestTagRow = typeof questTags.$inferSelect;
 export type QuestEventRow = typeof questEvents.$inferSelect;
 export type PartyMemberRow = typeof partyMembers.$inferSelect;
 export type QuestNominationRow = typeof questNominations.$inferSelect;
-export type QuestFloorRow = typeof questFloors.$inferSelect;
+export type QuestRefRow = typeof questRefs.$inferSelect;
 export type XpLedgerRow = typeof xpLedger.$inferSelect;
 export type NotificationRow = typeof notifications.$inferSelect;

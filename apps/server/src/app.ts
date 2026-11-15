@@ -19,7 +19,6 @@ import type { AppDb } from "./db/index.js";
 import { HttpError, sendApiError } from "./lib/errors.js";
 import { attachRealtime, noopRealtime } from "./lib/realtime.js";
 import { authRoutes } from "./routes/auth.js";
-import { floorsRoutes } from "./routes/floors.js";
 import { inviteRoutes } from "./routes/invites.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { partyRoutes } from "./routes/party.js";
@@ -158,7 +157,6 @@ export async function buildApp(
   await app.register(tagRoutes);
   await app.register(questRoutes);
   await app.register(partyRoutes);
-  await app.register(floorsRoutes);
   await app.register(notificationRoutes);
 
   return app;

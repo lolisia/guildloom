@@ -142,6 +142,7 @@ describe("POST /api/projects/:pid/quests", () => {
       number: 1,
       title: "로그인 버그",
       stage: "board",
+      kind: "fix",
       rank: "B",
       situation: "",
       direction: "",
@@ -264,6 +265,24 @@ describe("POST /api/projects/:pid/quests", () => {
     const badRank = await postQuest({ title: "등급", rank: "Z" });
     expect(badRank.statusCode).toBe(400);
   });
+
+  it("defaults kind to fix and accepts feature quests", async () => {
+    const fix = await createQuest({ title: "버그 수정" });
+    expect(fix.kind).toBe("fix");
+
+    const feature = await createQuest({ title: "새 기능", kind: "feature" });
+    expect(feature.kind).toBe("feature");
+
+    const stored = test.db
+      .select({ kind: quests.kind })
+      .from(quests)
+      .orderBy(quests.id)
+      .all();
+    expect(stored).toEqual([{ kind: "fix" }, { kind: "feature" }]);
+
+    const invalid = await postQuest({ title: "종류", kind: "chore" });
+    expect(invalid.statusCode).toBe(400);
+  });
 });
 
 describe("POST /api/projects/:pid/quests/bulk", () => {
@@ -287,7 +306,9 @@ describe("POST /api/projects/:pid/quests/bulk", () => {
     ]);
     expect(created.map((quest) => quest.number)).toEqual([2, 3, 4]);
     expect(created.every((quest) => quest.stage === "board")).toBe(true);
+    expect(created.every((quest) => quest.kind === "fix")).toBe(true);
     expect(created.every((quest) => quest.tags.length === 0)).toBe(true);
+    expect(created.every((quest) => quest.refs?.length === 0)).toBe(true);
 
     // Keys continue below the existing card, in insertion order.
     expect(existing.orderKey < (created[0]?.orderKey ?? "")).toBe(true);
@@ -423,6 +444,22 @@ describe("GET /api/projects/:pid/quests", () => {
     expect(listed[0]).not.toHaveProperty("projectId");
   });
 
+  it("derives the summary checklist progress from direction", async () => {
+    const checklist = await createQuest({
+      title: "체크리스트",
+      direction: "- [ ] 첫째\n- [x] 둘째\n* [X] 셋째",
+    });
+    const empty = await createQuest({ title: "빈 체크리스트" });
+
+    const summaries = (await listQuests()).json() as QuestSummary[];
+    const summary = summaries.find((entry) => entry.id === checklist.id);
+    expect(summary?.floors).toEqual({ done: 2, total: 3 });
+    expect(summary?.kind).toBe("fix");
+
+    const emptySummary = summaries.find((entry) => entry.id === empty.id);
+    expect(emptySummary?.floors).toEqual({ done: 0, total: 0 });
+  });
+
   it("filters by comma separated stages", async () => {
     const boardQuest = await createQuest({ title: "게시판" });
     const dungeonQuest = await createQuest({ title: "던전" });
@@ -527,6 +564,25 @@ describe("GET /api/quests/:id", () => {
     expect(response.json()).toEqual(created);
   });
 
+  it("returns checklist counts and an empty ref list in detail", async () => {
+    const created = await createQuest({
+      title: "상세 체크리스트",
+      direction: "- [x] 하나\n- [ ] 둘",
+    });
+
+    const response = await test.app.inject({
+      method: "GET",
+      url: `/api/quests/${created.id}`,
+      headers: { cookie },
+    });
+    expect(response.statusCode).toBe(200);
+    const detail = response.json() as Quest;
+    expect(detail.floors).toEqual({ done: 1, total: 2 });
+    expect(detail.direction).toBe("- [x] 하나\n- [ ] 둘");
+    expect(detail.refs).toEqual([]);
+    expect(detail.kind).toBe("fix");
+  });
+
   it("returns 404 for an unknown quest and 403 for non-members", async () => {
     const created = await createQuest({ title: "비공개" });
 
@@ -621,6 +677,32 @@ describe("PATCH /api/quests/:id", () => {
       (event) => event.type === "quest_edited",
     );
     expect(JSON.parse(edited?.payload ?? "{}")).toEqual({ fields: ["rank"] });
+  });
+
+  it("updates kind and records it only when it actually changes", async () => {
+    const created = await createQuest({ title: "종류 변경" });
+
+    const response = await patchQuest(created.id, { kind: "feature" });
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as Quest).kind).toBe("feature");
+
+    const edited = eventRows(created.id).filter(
+      (event) => event.type === "quest_edited",
+    );
+    expect(edited).toHaveLength(1);
+    expect(JSON.parse(edited[0]?.payload ?? "{}")).toEqual({
+      fields: ["kind"],
+    });
+
+    // Re-supplying the same kind is not a change and records nothing.
+    const same = await patchQuest(created.id, { kind: "feature" });
+    expect(same.statusCode).toBe(200);
+    expect(
+      eventRows(created.id).filter((event) => event.type === "quest_edited"),
+    ).toHaveLength(1);
+    expect((same.json() as Quest).updatedAt).toBe(
+      (response.json() as Quest).updatedAt,
+    );
   });
 
   it("does not record an event when nothing actually changes", async () => {

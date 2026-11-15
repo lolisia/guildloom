@@ -113,7 +113,6 @@ export function settleClear(
     .run();
 
   const bounty = computeBounty({
-    rank: quest.rank,
     createdAt: quest.createdAt,
     firstClaimedAt: quest.firstClaimedAt,
     now,

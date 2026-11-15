@@ -82,16 +82,17 @@ afterEach(async () => {
   await test.close();
 });
 
-/** POST a quest and return its detail. */
-async function createQuest(
-  title = "정산 의뢰",
-  rank: "F" | "E" | "D" | "C" | "B" | "A" | "S" = "D",
-): Promise<Quest> {
+/**
+ * POST a quest and return its detail.
+ *
+ * Ranks no longer change the bounty: every clear is worth BASE_CLEAR_XP (40).
+ */
+async function createQuest(title = "정산 의뢰"): Promise<Quest> {
   const response = await test.app.inject({
     method: "POST",
     url: `/api/projects/${project.id}/quests`,
     headers: { cookie: ownerCookie },
-    payload: { title, rank },
+    payload: { title },
   });
   expect(response.statusCode).toBe(201);
   return response.json() as Quest;
