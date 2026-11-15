@@ -16,7 +16,9 @@ import {
 } from "./api.js";
 import type { MemberStatus, Stage } from "./constants.js";
 
-/** Every quest event type (M1 lifecycle, then M2 party and boss events). */
+/**
+ * Every quest event type (M1 lifecycle, M2 party and boss, then F1 feedback).
+ */
 export const QUEST_EVENT_TYPES = [
   "quest_posted",
   "quest_edited",
@@ -36,6 +38,9 @@ export const QUEST_EVENT_TYPES = [
   "boss_engaged",
   "retry_requested",
   "quest_cleared",
+  "ref_added",
+  "ref_removed",
+  "clear_revoked",
 ] as const;
 
 /** A quest event type. */
@@ -44,6 +49,42 @@ export type QuestEventType = (typeof QUEST_EVENT_TYPES)[number];
 /** Quest event type enum. */
 export const questEventTypeSchema = z.enum(QUEST_EVENT_TYPES);
 
+/**
+ * The event type schema used by responses.
+ *
+ * Runtime validation is the full enum above. The inferred TypeScript type is
+ * deliberately widened to `string` so consumers that keep a
+ * `Record<QuestEvent["type"], ...>` (the current board timeline) stay
+ * assignable until the F1 web task adds icons for the new event types.
+ */
+const questEventResponseTypeSchema = questEventTypeSchema as unknown as z.ZodType<
+  string
+>;
+
+/**
+ * Event types that notify the guild as a whole (보드 알림). Reference and
+ * checklist edits stay in the quest log instead.
+ */
+export const KEY_EVENT_TYPES = [
+  "quest_posted",
+  "member_joined",
+  "member_left",
+  "boss_engaged",
+  "retry_requested",
+  "quest_cleared",
+  "clear_revoked",
+] as const;
+
+/** A quest event type that produces a guild-wide notification. */
+export type KeyEventType = (typeof KEY_EVENT_TYPES)[number];
+
+const KEY_EVENT_TYPE_SET: ReadonlySet<string> = new Set(KEY_EVENT_TYPES);
+
+/** Whether `type` is one of {@link KEY_EVENT_TYPES}. */
+export function isKeyEvent(type: string): type is KeyEventType {
+  return KEY_EVENT_TYPE_SET.has(type);
+}
+
 /** Fields of a quest that can be edited (canonical order). */
 export const QUEST_EDITABLE_FIELDS = [
   "title",
@@ -51,6 +92,7 @@ export const QUEST_EDITABLE_FIELDS = [
   "direction",
   "tags",
   "rank",
+  "kind",
 ] as const;
 
 /** A quest field name that may appear in a `quest_edited` payload. */
@@ -150,13 +192,38 @@ export const floorAddedPayloadSchema = z.object({
 });
 export type FloorAddedPayload = z.infer<typeof floorAddedPayloadSchema>;
 
-/** `floor_checked` payload (`done: false` reopens the floor). */
+/**
+ * `floor_checked` payload (`done: false` reopens the item).
+ *
+ * The type name is historical: F1 checklists reuse it, so the payload carries
+ * the checklist item text instead of a floor id/title.
+ */
 export const floorCheckedPayloadSchema = z.object({
-  floorId: idSchema,
-  title: z.string(),
+  text: z.string(),
   done: z.boolean(),
 });
 export type FloorCheckedPayload = z.infer<typeof floorCheckedPayloadSchema>;
+
+/** `ref_added` payload (참고 문서 추가). */
+export const refAddedPayloadSchema = z.object({
+  refId: idSchema,
+  target: z.string(),
+  label: z.string().nullable(),
+});
+export type RefAddedPayload = z.infer<typeof refAddedPayloadSchema>;
+
+/** `ref_removed` payload (참고 문서 삭제). */
+export const refRemovedPayloadSchema = z.object({
+  target: z.string(),
+  label: z.string().nullable(),
+});
+export type RefRemovedPayload = z.infer<typeof refRemovedPayloadSchema>;
+
+/** `clear_revoked` payload: the XP taken back from every reward. */
+export const clearRevokedPayloadSchema = z.object({
+  xpRevoked: z.number().int(),
+});
+export type ClearRevokedPayload = z.infer<typeof clearRevokedPayloadSchema>;
 
 /** `boss_engaged` payload. */
 export const bossEngagedPayloadSchema = z.object({});
@@ -188,7 +255,7 @@ export const questEventSchema = z.object({
   id: idSchema,
   questId: idSchema,
   projectId: idSchema,
-  type: questEventTypeSchema,
+  type: questEventResponseTypeSchema,
   payload: z.unknown(),
   actor: userRefSchema.nullable(),
   familiarId: z.number().int().nullable(),
@@ -244,6 +311,7 @@ const EDIT_FIELD_LABELS: Record<QuestEditableField, string> = {
   direction: "수정 방향",
   tags: "태그",
   rank: "등급",
+  kind: "종류",
 };
 
 const UNKNOWN_ACTOR = "알 수 없는 모험가";
@@ -441,7 +509,29 @@ export function renderEvent(
         const verb = payload.done ? "돌파했습니다." : "다시 열었습니다.";
         return [
           renderActor(event, ctx),
-          { kind: "text", text: ` 가 '${payload.title}' 을 ${verb}` },
+          { kind: "text", text: ` 가 '${payload.text}' 을 ${verb}` },
+        ];
+      }
+      case "ref_added": {
+        const payload = refAddedPayloadSchema.parse(event.payload);
+        const label = payload.label ?? payload.target;
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 참고 문서 '${label}' 를 추가했습니다.`,
+          },
+        ];
+      }
+      case "ref_removed": {
+        const payload = refRemovedPayloadSchema.parse(event.payload);
+        const label = payload.label ?? payload.target;
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 참고 문서 '${label}' 를 삭제했습니다.`,
+          },
         ];
       }
       case "boss_engaged": {
@@ -473,6 +563,16 @@ export function renderEvent(
           {
             kind: "text",
             text: ` 가 던전 클리어를 선언했습니다!${suffix}`,
+          },
+        ];
+      }
+      case "clear_revoked": {
+        const payload = clearRevokedPayloadSchema.parse(event.payload);
+        return [
+          renderActor(event, ctx),
+          {
+            kind: "text",
+            text: ` 가 던전 클리어를 취소했습니다. (XP ${payload.xpRevoked} 회수)`,
           },
         ];
       }

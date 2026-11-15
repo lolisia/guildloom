@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NOTIFICATION_TYPES,
+  QUEST_KINDS,
   RANKS,
   STAGES,
+  XP_REASONS,
   addFloorsRequestSchema,
+  appendChecklistRequestSchema,
   bulkCreateQuestsRequestSchema,
+  clearPreviewResponseSchema,
   clearQuestResponseSchema,
+  createQuestRefRequestSchema,
   createQuestRequestSchema,
   displayNameSchema,
   floorListResponseSchema,
@@ -22,16 +28,21 @@ import {
   notificationListQuerySchema,
   notificationListResponseSchema,
   notificationSchema,
+  notificationTypeSchema,
   passNominationRequestSchema,
   passwordSchema,
   questEventSchema,
   questEventsResponseSchema,
+  questKindSchema,
+  questRefSchema,
   questSchema,
   questSummarySchema,
   rankSchema,
   readNotificationsRequestSchema,
+  refKind,
   retryQuestRequestSchema,
   stageSchema,
+  toggleChecklistRequestSchema,
   updateFloorRequestSchema,
   updateQuestRequestSchema,
 } from "../src/index.js";
@@ -190,6 +201,31 @@ describe("stageSchema and rankSchema", () => {
       true,
     );
   });
+
+  it("accepts fix/feature kinds on create and update", () => {
+    expect(
+      createQuestRequestSchema.parse({ title: "로그인 버그", kind: "feature" })
+        .kind,
+    ).toBe("feature");
+    expect(
+      createQuestRequestSchema.parse({ title: "로그인 버그" }).kind,
+    ).toBeUndefined();
+    expect(
+      createQuestRequestSchema.safeParse({ title: "로그인 버그", kind: "chore" })
+        .success,
+    ).toBe(false);
+    expect(updateQuestRequestSchema.parse({ kind: "fix" }).kind).toBe("fix");
+  });
+});
+
+describe("notification and XP constants", () => {
+  it("adds the clear_revoked notification type", () => {
+    expect(NOTIFICATION_TYPES).toContain("clear_revoked");
+  });
+
+  it("adds the revoke XP reason while keeping the existing ones", () => {
+    expect(XP_REASONS).toEqual(["clear", "requester", "guide", "revoke"]);
+  });
 });
 
 describe("bulkCreateQuestsRequestSchema", () => {
@@ -269,6 +305,7 @@ describe("questSummarySchema", () => {
       "number",
       "title",
       "stage",
+      "kind",
       "rank",
       "orderKey",
       "tags",
@@ -282,16 +319,36 @@ describe("questSummarySchema", () => {
     ]);
   });
 
-  it("parses a quest summary and keeps its shape", () => {
+  it("parses a quest summary and fills the default kind", () => {
     const parsed = questSummarySchema.parse(summary);
 
-    expect(parsed).toEqual(summary);
-    expect(Object.keys(parsed)).toEqual(Object.keys(summary));
+    expect(parsed).toEqual({ ...summary, kind: "fix" });
+    expect(Object.keys(parsed).filter((key) => key !== "kind")).toEqual(
+      Object.keys(summary),
+    );
   });
 
   it("accepts a rank and null", () => {
     expect(questSummarySchema.parse({ ...summary, rank: "S" }).rank).toBe("S");
     expect(questSummarySchema.parse({ ...summary, rank: null }).rank).toBeNull();
+  });
+
+  it("accepts exactly the known quest kinds and defaults to fix", () => {
+    expect(questKindSchema.options).toEqual([...QUEST_KINDS]);
+    expect([...QUEST_KINDS]).toEqual(["fix", "feature"]);
+    expect(questSummarySchema.parse(summary).kind).toBe("fix");
+    expect(
+      questSummarySchema.parse({ ...summary, kind: "feature" }).kind,
+    ).toBe("feature");
+    expect(
+      questSummarySchema.safeParse({ ...summary, kind: "chore" }).success,
+    ).toBe(false);
+  });
+
+  it("serializes a legacy summary that has no kind yet", () => {
+    // Fastify serializes responses with Zod's encode direction; the field is
+    // optional there until the server sends it (parse still fills "fix").
+    expect(questSummarySchema.encode(summary)).toEqual(summary);
   });
 
   it("rejects a summary with an invalid stage", () => {
@@ -305,7 +362,7 @@ describe("questSchema", () => {
   it("overrides the summary party and floors with detail shapes", () => {
     const parsed = questSchema.parse(questDetail);
 
-    expect(parsed).toEqual(questDetail);
+    expect(parsed).toEqual({ ...questDetail, kind: "fix", refs: [] });
     // PartyMember carries the full user ref, not the summary's flat fields.
     expect(parsed.party[0]?.user.displayName).toBe("김철수");
     expect(parsed.party[1]?.retreatReason).toBe("담당자가 아님");
@@ -313,6 +370,28 @@ describe("questSchema", () => {
     expect(parsed.floors[1]?.doneAt).toBeNull();
     expect(parsed.nominations[0]?.nominee.id).toBe(9);
     expect(parsed.firstClaimedAt).toBe(1_700_000_000_000);
+  });
+
+  it("defaults kind and refs while accepting explicit values", () => {
+    expect(questSchema.parse(questDetail).kind).toBe("fix");
+    expect(questSchema.parse(questDetail).refs).toEqual([]);
+
+    const ref = {
+      id: 3,
+      label: "설계 명세",
+      target: "https://example.com/spec",
+      kind: "url",
+      createdBy: { id: 7, displayName: "김철수" },
+      createdAt: 1_700_000_000_400,
+    };
+    const parsed = questSchema.parse({
+      ...questDetail,
+      kind: "feature",
+      refs: [ref],
+    });
+
+    expect(parsed.kind).toBe("feature");
+    expect(parsed.refs).toEqual([ref]);
   });
 
   it("requires firstClaimedAt and accepts null while unclaimed", () => {
@@ -325,6 +404,10 @@ describe("questSchema", () => {
     expect(questSchema.safeParse(withoutFirstClaim).success).toBe(false);
   });
 
+  it("serializes a legacy detail that has no kind or refs yet", () => {
+    expect(questSchema.encode(questDetail)).toEqual(questDetail);
+  });
+
   it("keeps the summary fields and adds the detail-only ones", () => {
     for (const key of Object.keys(questSummarySchema.shape)) {
       expect(questSchema.shape).toHaveProperty(key);
@@ -335,10 +418,130 @@ describe("questSchema", () => {
       "direction",
       "archiveReason",
       "nominations",
+      "refs",
       "firstClaimedAt",
     ]) {
       expect(questSchema.shape).toHaveProperty(key);
     }
+  });
+});
+
+describe("quest refs, checklists and clear preview", () => {
+  const userRef = { id: 7, displayName: "김철수" };
+
+  it("classifies http(s) targets as urls and everything else as paths", () => {
+    expect(refKind("https://example.com/spec")).toBe("url");
+    expect(refKind("HTTP://Example.com/spec")).toBe("url");
+    expect(refKind("  https://example.com/spec  ")).toBe("url");
+    expect(refKind("docs/login.md")).toBe("path");
+    expect(refKind("ftp://example.com/spec")).toBe("path");
+    expect(refKind("")).toBe("path");
+  });
+
+  it("parses a reference document with a nullable label", () => {
+    const ref = {
+      id: 3,
+      label: "설계 명세",
+      target: "https://example.com/spec",
+      kind: "url",
+      createdBy: userRef,
+      createdAt: 1_700_000_000_000,
+    };
+
+    expect(questRefSchema.parse(ref)).toEqual(ref);
+    expect(questRefSchema.parse({ ...ref, label: null }).label).toBeNull();
+    expect(questRefSchema.safeParse({ ...ref, kind: "ftp" }).success).toBe(
+      false,
+    );
+  });
+
+  it("validates reference creation input", () => {
+    expect(
+      createQuestRefRequestSchema.parse({ target: "  docs/a.md  " }),
+    ).toEqual({ target: "docs/a.md" });
+    expect(
+      createQuestRefRequestSchema.parse({
+        label: "  설계 명세  ",
+        target: "https://example.com/spec",
+      }),
+    ).toEqual({ label: "설계 명세", target: "https://example.com/spec" });
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "   " }).success,
+    ).toBe(false);
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "a".repeat(1000) })
+        .success,
+    ).toBe(true);
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "a".repeat(1001) })
+        .success,
+    ).toBe(false);
+    expect(
+      createQuestRefRequestSchema.safeParse({
+        label: "가".repeat(101),
+        target: "docs/a.md",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates checklist toggle input", () => {
+    expect(
+      toggleChecklistRequestSchema.parse({ done: true, text: "- [ ] a" }),
+    ).toEqual({ done: true, text: "- [ ] a" });
+    expect(toggleChecklistRequestSchema.safeParse({ done: true }).success).toBe(
+      false,
+    );
+    expect(
+      toggleChecklistRequestSchema.safeParse({ done: "yes", text: "" }).success,
+    ).toBe(false);
+  });
+
+  it("caps checklist appends at 50 titles of 200 characters", () => {
+    // Blank titles pass validation and are dropped by appendChecklistItems.
+    expect(
+      appendChecklistRequestSchema.parse({ titles: ["  할 일  ", "   "] }),
+    ).toEqual({ titles: ["  할 일  ", "   "] });
+    expect(
+      appendChecklistRequestSchema.safeParse({
+        titles: Array.from({ length: 50 }, (_, index) => `${index}번`),
+      }).success,
+    ).toBe(true);
+    expect(
+      appendChecklistRequestSchema.safeParse({
+        titles: Array.from({ length: 51 }, (_, index) => `${index}번`),
+      }).success,
+    ).toBe(false);
+    expect(
+      appendChecklistRequestSchema.safeParse({ titles: [] }).success,
+    ).toBe(false);
+    expect(
+      appendChecklistRequestSchema.safeParse({ titles: ["가".repeat(201)] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("parses the clear preview with and without a requester bonus", () => {
+    const preview = {
+      total: 96,
+      rewards: [{ user: userRef, amount: 48 }],
+      requesterBonus: { user: { id: 8, displayName: "이영희" }, amount: 5 },
+      actorIsInvolved: true,
+    };
+
+    expect(clearPreviewResponseSchema.parse(preview)).toEqual(preview);
+    expect(
+      clearPreviewResponseSchema.parse({ ...preview, requesterBonus: null })
+        .requesterBonus,
+    ).toBeNull();
+    expect(
+      clearPreviewResponseSchema.safeParse({ ...preview, total: 1.5 }).success,
+    ).toBe(false);
+    expect(
+      clearPreviewResponseSchema.safeParse({
+        ...preview,
+        actorIsInvolved: "yes",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -400,6 +603,26 @@ describe("nomination and notification schemas", () => {
 
     expect(parsed.questId).toBeNull();
     expect(parsed.readAt).toBeNull();
+  });
+
+  it("accepts the F1 clear_revoked notification at runtime", () => {
+    expect(notificationTypeSchema.parse("clear_revoked")).toBe("clear_revoked");
+
+    const parsed = notificationSchema.parse({
+      id: 2,
+      projectId: 2,
+      questId: 12,
+      questNumber: 12,
+      questTitle: "로그인 버그",
+      type: "clear_revoked",
+      actor: ref,
+      payload: { xpRevoked: 48 },
+      createdAt: 1_700_000_000_000,
+      readAt: null,
+    });
+
+    expect(parsed.type).toBe("clear_revoked");
+    expect(parsed.payload).toEqual({ xpRevoked: 48 });
   });
 });
 
@@ -655,6 +878,12 @@ describe("questEventSchema", () => {
       "retry_requested",
       "quest_cleared",
     ]) {
+      expect(questEventSchema.safeParse({ ...event, type }).success).toBe(true);
+    }
+  });
+
+  it("accepts the F1 reference and revoke event types", () => {
+    for (const type of ["ref_added", "ref_removed", "clear_revoked"]) {
       expect(questEventSchema.safeParse({ ...event, type }).success).toBe(true);
     }
   });

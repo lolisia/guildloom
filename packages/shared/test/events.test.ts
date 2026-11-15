@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  KEY_EVENT_TYPES,
   MEMBER_STATUS_LABELS,
+  QUEST_EVENT_TYPES,
+  isKeyEvent,
   renderEvent,
   type EventRenderContext,
   type QuestEvent,
@@ -87,12 +90,14 @@ describe("renderEvent", () => {
     const segments = renderEvent(
       makeEvent({
         type: "quest_edited",
-        payload: { fields: ["title", "situation", "direction", "tags", "rank"] },
+        payload: {
+          fields: ["title", "situation", "direction", "tags", "rank", "kind"],
+        },
       }),
     );
 
     expect(sentence(segments)).toBe(
-      "'김철수' 가 의뢰 내용을 고쳤습니다 (제목, 현재 상황, 수정 방향, 태그, 등급).",
+      "'김철수' 가 의뢰 내용을 고쳤습니다 (제목, 현재 상황, 수정 방향, 태그, 등급, 종류).",
     );
   });
 
@@ -345,17 +350,17 @@ describe("renderEvent", () => {
     ).toBe("'김철수' 가 '3층: API 수정' 을 추가했습니다.");
   });
 
-  it("renders a floor being cleared and reopened", () => {
+  it("renders a checklist item being cleared and reopened", () => {
     const cleared = renderEvent(
       makeEvent({
         type: "floor_checked",
-        payload: { floorId: 5, title: "3층: API 수정", done: true },
+        payload: { text: "3층: API 수정", done: true },
       }),
     );
     const reopened = renderEvent(
       makeEvent({
         type: "floor_checked",
-        payload: { floorId: 5, title: "3층: API 수정", done: false },
+        payload: { text: "3층: API 수정", done: false },
       }),
     );
 
@@ -364,6 +369,62 @@ describe("renderEvent", () => {
     );
     expect(sentence(reopened)).toBe(
       "'김철수' 가 '3층: API 수정' 을 다시 열었습니다.",
+    );
+  });
+
+  it("renders a reference document being added", () => {
+    const labelled = renderEvent(
+      makeEvent({
+        type: "ref_added",
+        payload: {
+          refId: 4,
+          target: "https://example.com/spec",
+          label: "설계 명세",
+        },
+      }),
+    );
+    const unlabelled = renderEvent(
+      makeEvent({
+        type: "ref_added",
+        payload: {
+          refId: 5,
+          target: "docs/login.md",
+          label: null,
+        },
+      }),
+    );
+
+    expect(sentence(labelled)).toBe(
+      "'김철수' 가 참고 문서 '설계 명세' 를 추가했습니다.",
+    );
+    expect(sentence(unlabelled)).toBe(
+      "'김철수' 가 참고 문서 'docs/login.md' 를 추가했습니다.",
+    );
+    expect(labelled.map((segment) => segment.kind)).toEqual([
+      "actor",
+      "text",
+    ]);
+  });
+
+  it("renders a reference document being removed", () => {
+    const labelled = renderEvent(
+      makeEvent({
+        type: "ref_removed",
+        payload: { target: "https://example.com/spec", label: "설계 명세" },
+      }),
+    );
+    const unlabelled = renderEvent(
+      makeEvent({
+        type: "ref_removed",
+        payload: { target: "docs/login.md", label: null },
+      }),
+    );
+
+    expect(sentence(labelled)).toBe(
+      "'김철수' 가 참고 문서 '설계 명세' 를 삭제했습니다.",
+    );
+    expect(sentence(unlabelled)).toBe(
+      "'김철수' 가 참고 문서 'docs/login.md' 를 삭제했습니다.",
     );
   });
 
@@ -430,6 +491,23 @@ describe("renderEvent", () => {
     expect(sentence(segments)).toBe("'김철수' 가 던전 클리어를 선언했습니다!");
   });
 
+  it("renders a revoked clear with the recovered XP", () => {
+    const segments = renderEvent(
+      makeEvent({
+        type: "clear_revoked",
+        payload: { xpRevoked: 48 },
+      }),
+    );
+
+    expect(sentence(segments)).toBe(
+      "'김철수' 가 던전 클리어를 취소했습니다. (XP 48 회수)",
+    );
+    expect(segments.map((segment) => segment.kind)).toEqual([
+      "actor",
+      "text",
+    ]);
+  });
+
   it("returns a safe text segment for malformed payloads", () => {
     const segments = renderEvent(
       makeEvent({
@@ -451,5 +529,50 @@ describe("renderEvent", () => {
 
     expect(() => renderEvent(event)).not.toThrow();
     expect(renderEvent(event)[0]?.kind).toBe("text");
+  });
+});
+
+describe("isKeyEvent", () => {
+  it("publishes the F1 event types in QUEST_EVENT_TYPES", () => {
+    expect(QUEST_EVENT_TYPES).toEqual(
+      expect.arrayContaining(["ref_added", "ref_removed", "clear_revoked"]),
+    );
+  });
+
+  it("flags exactly the guild-wide notification events", () => {
+    expect([...KEY_EVENT_TYPES]).toEqual([
+      "quest_posted",
+      "member_joined",
+      "member_left",
+      "boss_engaged",
+      "retry_requested",
+      "quest_cleared",
+      "clear_revoked",
+    ]);
+
+    for (const type of KEY_EVENT_TYPES) {
+      expect(isKeyEvent(type)).toBe(true);
+    }
+  });
+
+  it("keeps checklist and reference edits out of the key events", () => {
+    for (const type of [
+      "ref_added",
+      "ref_removed",
+      "floor_checked",
+      "floor_added",
+      "quest_edited",
+    ]) {
+      expect(isKeyEvent(type)).toBe(false);
+    }
+    expect(isKeyEvent("quest_danced")).toBe(false);
+    expect(isKeyEvent("")).toBe(false);
+  });
+
+  it("only flags types that exist in QUEST_EVENT_TYPES", () => {
+    const known = new Set<string>(QUEST_EVENT_TYPES);
+    for (const type of KEY_EVENT_TYPES) {
+      expect(known.has(type)).toBe(true);
+    }
   });
 });

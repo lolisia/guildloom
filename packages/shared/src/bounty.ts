@@ -1,19 +1,19 @@
 /**
  * Bounty (현상금) calculation for unclaimed quests.
  *
- * The bounty is never stored: every read computes it from the quest's rank,
- * creation time and the moment the party first formed. The multiplier grows by
- * {@link BOUNTY_STEP} per full day on the board (starting at 1×) and caps at
- * {@link BOUNTY_CAP}. Once the cap is reached, an unclaimed quest turns
- * "dusty" after {@link DUSTY_DAYS_AFTER_CAP} more days.
+ * Every clear is worth {@link BASE_CLEAR_XP}; the bounty is never stored and is
+ * recomputed on every read from the quest's creation time and the moment the
+ * party first formed. The multiplier grows by {@link BOUNTY_STEP} per full day
+ * on the board (starting at 1×) and caps at {@link BOUNTY_CAP}. Once the cap is
+ * reached, an unclaimed quest turns "dusty" after {@link DUSTY_DAYS_AFTER_CAP}
+ * more days.
  */
 import type { Bounty } from "./api.js";
 import {
+  BASE_CLEAR_XP,
   BOUNTY_CAP,
   BOUNTY_STEP,
-  DEFAULT_RANK,
   DUSTY_DAYS_AFTER_CAP,
-  RANK_XP,
   type Rank,
 } from "./constants.js";
 
@@ -29,8 +29,12 @@ export const DUSTY_AFTER_DAYS =
 
 /** Inputs for {@link computeBounty}. */
 export interface BountyInput {
-  /** Quest rank; a missing rank falls back to {@link DEFAULT_RANK}. */
-  rank: Rank | null | undefined;
+  /**
+   * @deprecated Ranks no longer change the bounty (every clear is worth
+   * {@link BASE_CLEAR_XP}). Still accepted, but ignored, so callers that pass
+   * the quest rank keep compiling until they are updated.
+   */
+  rank?: Rank | null;
   /** When the quest was posted (epoch ms). */
   createdAt: number;
   /** When the first party member joined; `null`/`undefined` while unclaimed. */
@@ -42,17 +46,16 @@ export interface BountyInput {
 /**
  * Compute the current bounty of a quest.
  *
- * `end` is `firstClaimedAt ?? now`, so the multiplier freezes as soon as the
- * first party member joins. `dusty` only applies while the quest is still
- * unclaimed.
+ * The base is always {@link BASE_CLEAR_XP}. `end` is `firstClaimedAt ?? now`,
+ * so the multiplier freezes as soon as the first party member joins. `dusty`
+ * only applies while the quest is still unclaimed.
  */
 export function computeBounty({
-  rank,
   createdAt,
   firstClaimedAt,
   now,
 }: BountyInput): Bounty {
-  const base = RANK_XP[rank ?? DEFAULT_RANK];
+  const base = BASE_CLEAR_XP;
   const claimedAt = firstClaimedAt ?? null;
   const end = claimedAt ?? now;
   const days = Math.max(0, Math.floor((end - createdAt) / MS_PER_DAY));
