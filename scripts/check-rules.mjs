@@ -4,8 +4,10 @@
  *
  * Dependency-free on purpose: this file may only use Node builtins so it can
  * run in `scripts/verify.sh` without an install step. `checkSource` is the pure
- * entry point (used by the test file and future tooling); `run` collects the
- * files a git checkout exposes and checks each one. Running this file directly
+ * entry point for the per-file source rules (used by the test file and future
+ * tooling); `checkTokens` and `checkAvatarPalette` add the palette rules that
+ * span a file's design values; `run` collects the files a git checkout exposes
+ * and checks each one. Running this file directly
  * prints every violation as `path:line: [rule-id] message` on stderr and exits
  * 1, or prints `check-rules: ok (N files)` and exits 0.
  */
@@ -124,6 +126,26 @@ const LOCAL_PATH_RES = [
   /\/[a-z]\/DEV\/[^\s"'`<>]*/g,
   /\/Users\/[^/]+\/[^\s"'`<>]*/g,
 ];
+
+/** Files that own the palette values checked by rules 12-13. */
+const TOKEN_CSS_FILE = "apps/web/src/index.css";
+const AVATAR_SPRITE_FILE = "apps/web/src/components/AdventurerSprite.tsx";
+
+/** WCAG 2.x AA minimum contrast for normal text. */
+const MIN_CONTRAST_RATIO = 4.5;
+
+/** Foreground/background design tokens paired by the contrast rule. */
+const CONTRAST_FOREGROUND_TOKENS = ["ink", "muted", "teal", "gold", "brick"];
+const CONTRAST_BACKGROUND_TOKENS = ["paper", "ground", "sunken"];
+
+/** Light token block (`@theme static`) and dark override block. */
+const THEME_BLOCK_RE = /@theme\b[^{]*\{/;
+const DARK_THEME_BLOCK_RE = /\[data-theme\s*=\s*["']?dark["']?\]\s*\{/;
+
+/** `AVATAR_INITIAL_COLOR = "#RRGGBB"` and `AVATAR_COLORS = [ ... ] as const`. */
+const AVATAR_INITIAL_RE =
+  /AVATAR_INITIAL_COLOR\s*=\s*["'](#[0-9a-fA-F]{6})["']/;
+const AVATAR_COLORS_RE = /AVATAR_COLORS\s*=\s*\[/;
 
 /** Normalize a path to forward slashes and remove a leading `./`. */
 function normalizePath(filePath) {
@@ -733,6 +755,260 @@ export function checkSource(filePath, text) {
   return kept.sort(compareViolations);
 }
 
+/** Blank out CSS comments, preserving every offset and line break. */
+function maskCssComments(text) {
+  const chars = text.split("");
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      for (let j = i; j < stop; j += 1) {
+        if (chars[j] !== "\n" && chars[j] !== "\r") chars[j] = " ";
+      }
+      i = stop;
+      continue;
+    }
+    i += 1;
+  }
+  return chars.join("");
+}
+
+/**
+ * Inner offset range of the first `{ ... }` block whose header matches
+ * `header`, or `null` when that block is absent.
+ */
+function cssBlockRange(masked, header) {
+  const match = header.exec(masked);
+  if (match === null) return null;
+  const open = match.index + match[0].lastIndexOf("{");
+  let depth = 0;
+  for (let index = open; index < masked.length; index += 1) {
+    const ch = masked[index];
+    if (ch === "{") {
+      depth += 1;
+    } else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return { start: open + 1, end: index };
+    }
+  }
+  return { start: open + 1, end: masked.length };
+}
+
+/** `--color-<name>: #RRGGBB` declarations inside `[start, end)`. */
+function parseColorTokens(masked, start, end) {
+  const tokens = new Map();
+  const matcher =
+    /--color-([A-Za-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{6})(?![0-9a-fA-F])/g;
+  matcher.lastIndex = start;
+  let match;
+  while ((match = matcher.exec(masked)) !== null) {
+    if (match.index >= end) break;
+    tokens.set(match[1], {
+      hex: match[2],
+      line: lineAt(masked, match.index),
+    });
+  }
+  return tokens;
+}
+
+/** Dark tokens layered over light ones; anything dark omits is inherited. */
+function tokensForTheme(lightTokens, darkTokens, theme) {
+  if (theme !== "dark") return lightTokens;
+  const merged = new Map(lightTokens);
+  for (const [name, token] of darkTokens) merged.set(name, token);
+  return merged;
+}
+
+/** WCAG 2.x linearisation of one 0-255 sRGB channel. */
+function linearizeChannel(value) {
+  const channel = value / 255;
+  return channel <= 0.03928
+    ? channel / 12.92
+    : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+/** WCAG 2.x relative luminance of a `#RRGGBB` colour. */
+function relativeLuminance(hex) {
+  const digits = hex.slice(1);
+  const red = Number.parseInt(digits.slice(0, 2), 16);
+  const green = Number.parseInt(digits.slice(2, 4), 16);
+  const blue = Number.parseInt(digits.slice(4, 6), 16);
+  return (
+    0.2126 * linearizeChannel(red) +
+    0.7152 * linearizeChannel(green) +
+    0.0722 * linearizeChannel(blue)
+  );
+}
+
+/** WCAG 2.x contrast ratio between two `#RRGGBB` colours. */
+function contrastRatio(foreground, background) {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  const lighter = Math.max(a, b);
+  const darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** `X.XX (< 4.5)` suffix shared by the contrast failure messages. */
+function contrastSuffix(ratio) {
+  return `${ratio.toFixed(2)} (< ${MIN_CONTRAST_RATIO})`;
+}
+
+/** Offset of the `]` matching the `[` at `open`, or -1 when unterminated. */
+function findBracketEnd(text, open) {
+  let depth = 0;
+  let quote = null;
+  for (let index = open; index < text.length; index += 1) {
+    const ch = text[index];
+    if (quote !== null) {
+      if (ch === "\\") {
+        index += 1;
+      } else if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "[") {
+      depth += 1;
+    } else if (ch === "]") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Check design-token contrast (rule 12) in `apps/web/src/index.css`.
+ *
+ * The light `@theme static` block defines the palette and
+ * `[data-theme="dark"]` overrides it; a dark theme inherits every token it
+ * does not redefine. Each theme must clear WCAG 2.x AA (4.5:1) for every
+ * foreground token on every background token. `rgb(...)` declarations such as
+ * `--color-scrim` are intentionally not part of the pairs.
+ *
+ * @param {string} cssText contents of `apps/web/src/index.css`.
+ * @returns {{file: string, line: number, rule: string, message: string}[]}
+ */
+export function checkTokens(cssText) {
+  const masked = maskCssComments(String(cssText ?? ""));
+  const lightRange = cssBlockRange(masked, THEME_BLOCK_RE);
+  const darkRange = cssBlockRange(masked, DARK_THEME_BLOCK_RE);
+  const lightTokens =
+    lightRange === null
+      ? new Map()
+      : parseColorTokens(masked, lightRange.start, lightRange.end);
+  const darkTokens =
+    darkRange === null
+      ? new Map()
+      : parseColorTokens(masked, darkRange.start, darkRange.end);
+
+  const violations = [];
+  const push = (line, message) => {
+    violations.push({ file: TOKEN_CSS_FILE, line, rule: "contrast", message });
+  };
+
+  for (const theme of ["light", "dark"]) {
+    const tokens = tokensForTheme(lightTokens, darkTokens, theme);
+
+    for (const name of [
+      ...CONTRAST_FOREGROUND_TOKENS,
+      ...CONTRAST_BACKGROUND_TOKENS,
+    ]) {
+      if (!tokens.has(name)) {
+        push(1, `missing token --color-${name} (${theme})`);
+      }
+    }
+
+    for (const foreground of CONTRAST_FOREGROUND_TOKENS) {
+      const foregroundToken = tokens.get(foreground);
+      if (foregroundToken === undefined) continue;
+      for (const background of CONTRAST_BACKGROUND_TOKENS) {
+        const backgroundToken = tokens.get(background);
+        if (backgroundToken === undefined) continue;
+        const ratio = contrastRatio(foregroundToken.hex, backgroundToken.hex);
+        if (ratio >= MIN_CONTRAST_RATIO) continue;
+        push(
+          foregroundToken.line,
+          `contrast ${theme} ${foreground}/${background} = ${contrastSuffix(ratio)}`,
+        );
+      }
+    }
+  }
+
+  return violations.sort(compareViolations);
+}
+
+/**
+ * Check the avatar palette (rule 13) in
+ * `apps/web/src/components/AdventurerSprite.tsx`.
+ *
+ * Every 6-digit hex of the `AVATAR_COLORS = [ ... ] as const` array is a
+ * background for the theme-independent `AVATAR_INITIAL_COLOR` initial, so each
+ * pair must clear WCAG 2.x AA (4.5:1).
+ *
+ * @param {string} tsText contents of the sprite component.
+ * @returns {{file: string, line: number, rule: string, message: string}[]}
+ */
+export function checkAvatarPalette(tsText) {
+  const source = String(tsText ?? "");
+  const violations = [];
+  const push = (line, message) => {
+    violations.push({
+      file: AVATAR_SPRITE_FILE,
+      line,
+      rule: "avatar-contrast",
+      message,
+    });
+  };
+
+  const initialMatch = AVATAR_INITIAL_RE.exec(source);
+  const header = AVATAR_COLORS_RE.exec(source);
+  const open = header === null ? -1 : header.index + header[0].lastIndexOf("[");
+  const close = open === -1 ? -1 : findBracketEnd(source, open);
+
+  const entries = [];
+  if (close !== -1) {
+    const matcher = /#[0-9a-fA-F]{6}(?![0-9a-fA-F])/g;
+    matcher.lastIndex = open + 1;
+    let match;
+    while ((match = matcher.exec(source)) !== null) {
+      if (match.index >= close) break;
+      entries.push({ hex: match[0], line: lineAt(source, match.index) });
+    }
+  }
+
+  if (initialMatch === null) push(1, "missing AVATAR_INITIAL_COLOR");
+  if (entries.length === 0) push(1, "missing AVATAR_COLORS");
+  if (initialMatch === null) return violations.sort(compareViolations);
+
+  const initial = initialMatch[1];
+  for (const entry of entries) {
+    const ratio = contrastRatio(entry.hex, initial);
+    if (ratio >= MIN_CONTRAST_RATIO) continue;
+    push(
+      entry.line,
+      `avatar contrast ${entry.hex}/${initial} = ${contrastSuffix(ratio)}`,
+    );
+  }
+
+  return violations.sort(compareViolations);
+}
+
+/** Read a repository-relative file, or `null` when it is not present. */
+function readRepoFile(root, file) {
+  try {
+    return readFileSync(path.join(root, file), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 /** List the repository files a git checkout exposes (NUL-safe). */
 function listFiles(rootDir) {
   const result = spawnSync(
@@ -776,6 +1052,14 @@ export function run(rootDir) {
     }
     violations.push(...checkSource(file, text));
   }
+
+  // Rules 12-13 own two fixed files rather than matching a source-rule path;
+  // read them directly so they are checked even for a partial checkout.
+  const cssText = readRepoFile(root, TOKEN_CSS_FILE);
+  if (cssText !== null) violations.push(...checkTokens(cssText));
+
+  const spriteText = readRepoFile(root, AVATAR_SPRITE_FILE);
+  if (spriteText !== null) violations.push(...checkAvatarPalette(spriteText));
 
   return violations.sort(compareViolations);
 }

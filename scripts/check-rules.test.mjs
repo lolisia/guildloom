@@ -12,13 +12,20 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { checkSource, run } from "./check-rules.mjs";
+import {
+  checkAvatarPalette,
+  checkSource,
+  checkTokens,
+  run,
+} from "./check-rules.mjs";
 
 const WEB = "apps/web/src/x.tsx";
 const SHARED = "packages/shared/src/x.ts";
 const CSS = "apps/web/src/x.css";
 const HTML = "apps/web/index.html";
 const README = "README.md";
+const TOKEN_FILE = "apps/web/src/index.css";
+const AVATAR_FILE = "apps/web/src/components/AdventurerSprite.tsx";
 
 const IME_MESSAGE =
   "한글 IME 조합 중 Enter가 제출되지 않도록 isImeComposing(event)를 확인하라 (apps/web/src/lib/ime.ts)";
@@ -541,5 +548,318 @@ test("the scanner and this test file have no rule-11 self violations", () => {
   for (const name of ["check-rules.mjs", "check-rules.test.mjs"]) {
     const filePath = fileURLToPath(new URL(name, import.meta.url));
     assert.deepEqual(checkSource(`scripts/${name}`, readFileSync(filePath, "utf8")), []);
+  }
+});
+
+/** A token set whose every foreground clears 4.5:1 on every background. */
+const PASSING_TOKENS = [
+  "--color-paper: #FFFFFF;",
+  "--color-ground: #FFFFFF;",
+  "--color-sunken: #FFFFFF;",
+  "--color-ink: #000000;",
+  "--color-muted: #000000;",
+  "--color-teal: #000000;",
+  "--color-gold: #000000;",
+  "--color-brick: #000000;",
+];
+
+/** Render a `header { declarations }` CSS block, one declaration per line. */
+function cssBlock(header, declarations) {
+  return [header, ...declarations.map((line) => `  ${line}`), "}"].join("\n");
+}
+
+test("rule 12 contrast: a palette clearing 4.5:1 has no violations", () => {
+  assert.deepEqual(checkTokens(cssBlock("@theme static {", PASSING_TOKENS)), []);
+
+  // rgb() tokens and declarations inside comments never join the palette.
+  const css = [
+    cssBlock("@theme static {", [
+      "--color-scrim: rgb(31 36 41 / 0.40);",
+      ...PASSING_TOKENS,
+      "/* --color-teal: #777777; */",
+    ]),
+    "",
+    cssBlock('[data-theme="dark"] {', ["--color-scrim: rgb(8 8 12 / 0.60);"]),
+  ].join("\n");
+  assert.deepEqual(checkTokens(css), []);
+});
+
+test("rule 12 contrast: a failing light pair reports the exact message and line", () => {
+  const css = [
+    cssBlock("@theme static {", [
+      "--color-paper: #FFFFFF;", // 2
+      "--color-ground: #FFFFFF;", // 3
+      "--color-sunken: #FFFFFF;", // 4
+      "--color-ink: #777777;", // 5
+      "--color-muted: #000000;",
+      "--color-teal: #000000;",
+      "--color-gold: #000000;",
+      "--color-brick: #000000;",
+    ]),
+    // Dark keeps a passing ink value so only the light theme fails.
+    cssBlock('[data-theme="dark"] {', ["--color-ink: #000000;"]),
+  ].join("\n");
+
+  assert.deepEqual(checkTokens(css), [
+    {
+      file: TOKEN_FILE,
+      line: 5,
+      rule: "contrast",
+      message: "contrast light ink/paper = 4.48 (< 4.5)",
+    },
+    {
+      file: TOKEN_FILE,
+      line: 5,
+      rule: "contrast",
+      message: "contrast light ink/ground = 4.48 (< 4.5)",
+    },
+    {
+      file: TOKEN_FILE,
+      line: 5,
+      rule: "contrast",
+      message: "contrast light ink/sunken = 4.48 (< 4.5)",
+    },
+  ]);
+});
+
+test("rule 12 contrast: a dark override can fail while light passes", () => {
+  const css = [
+    cssBlock("@theme static {", PASSING_TOKENS), // 1-10
+    "", // 11
+    cssBlock('[data-theme="dark"] {', ["--color-ink: #777777;"]), // 12-14
+  ].join("\n");
+
+  const violations = checkTokens(css);
+  assert.deepEqual(
+    violations.map((violation) => violation.message),
+    [
+      "contrast dark ink/paper = 4.48 (< 4.5)",
+      "contrast dark ink/ground = 4.48 (< 4.5)",
+      "contrast dark ink/sunken = 4.48 (< 4.5)",
+    ],
+  );
+  for (const violation of violations) {
+    assert.equal(violation.file, TOKEN_FILE);
+    assert.equal(violation.line, 13);
+    assert.equal(violation.rule, "contrast");
+  }
+});
+
+test("rule 12 contrast: dark inherits light tokens it does not redefine", () => {
+  const css = [
+    cssBlock("@theme static {", [
+      "--color-paper: #FFFFFF;", // 2
+      "--color-ground: #FFFFFF;", // 3
+      "--color-sunken: #FFFFFF;", // 4
+      "--color-ink: #777777;", // 5
+      "--color-muted: #000000;",
+      "--color-teal: #000000;",
+      "--color-gold: #000000;",
+      "--color-brick: #000000;",
+    ]),
+    "",
+    cssBlock('[data-theme="dark"] {', ["--color-brick: #000000;"]),
+  ].join("\n");
+
+  const dark = checkTokens(css).filter((violation) =>
+    violation.message.startsWith("contrast dark "),
+  );
+  assert.deepEqual(
+    dark.map((violation) => [violation.line, violation.message]),
+    [
+      [5, "contrast dark ink/paper = 4.48 (< 4.5)"],
+      [5, "contrast dark ink/ground = 4.48 (< 4.5)"],
+      [5, "contrast dark ink/sunken = 4.48 (< 4.5)"],
+    ],
+  );
+});
+
+test("rule 12 contrast: missing tokens are reported once per theme", () => {
+  const css = cssBlock("@theme static {", [
+    "--color-paper: #FFFFFF;",
+    "--color-ground: #FFFFFF;",
+    "--color-sunken: #FFFFFF;",
+    "--color-ink: #000000;",
+    "--color-muted: #000000;",
+    "--color-gold: #000000;",
+    "--color-brick: #000000;",
+  ]);
+
+  assert.deepEqual(checkTokens(css), [
+    {
+      file: TOKEN_FILE,
+      line: 1,
+      rule: "contrast",
+      message: "missing token --color-teal (light)",
+    },
+    {
+      file: TOKEN_FILE,
+      line: 1,
+      rule: "contrast",
+      message: "missing token --color-teal (dark)",
+    },
+  ]);
+});
+
+test("rule 12 contrast: an absent theme block reports every required token", () => {
+  const violations = checkTokens("");
+  assert.equal(violations.length, 16);
+  assert.ok(violations.every((violation) => violation.line === 1));
+  assert.ok(
+    violations.every((violation) =>
+      violation.message.startsWith("missing token --color-"),
+    ),
+  );
+  assert.equal(
+    violations.filter((violation) => violation.message.endsWith("(light)"))
+      .length,
+    8,
+  );
+  assert.equal(
+    violations.filter((violation) => violation.message.endsWith("(dark)"))
+      .length,
+    8,
+  );
+});
+
+test("rule 13 avatar-contrast: a low-contrast entry reports the exact message", () => {
+  const text = [
+    'export const AVATAR_INITIAL_COLOR = "#ffffff";', // 1
+    "", // 2
+    "export const AVATAR_COLORS = [", // 3
+    '  "#000000",', // 4
+    '  "#777777",', // 5
+    "] as const;", // 6
+  ].join("\n");
+
+  assert.deepEqual(checkAvatarPalette(text), [
+    {
+      file: AVATAR_FILE,
+      line: 5,
+      rule: "avatar-contrast",
+      message: "avatar contrast #777777/#ffffff = 4.48 (< 4.5)",
+    },
+  ]);
+});
+
+test("rule 13 avatar-contrast: entries at or above 4.5:1 pass", () => {
+  const text = [
+    'export const AVATAR_INITIAL_COLOR = "#ffffff";',
+    "",
+    "export const AVATAR_COLORS = [",
+    '  "#000000",',
+    '  "#767676",', // 4.54:1
+    "] as const;",
+  ].join("\n");
+
+  assert.deepEqual(checkAvatarPalette(text), []);
+});
+
+test("rule 13 avatar-contrast: a missing initial or palette is reported", () => {
+  const noInitial = [
+    "export const AVATAR_COLORS = [",
+    '  "#000000",',
+    "] as const;",
+  ].join("\n");
+  const initialViolations = checkAvatarPalette(noInitial);
+  assert.equal(initialViolations.length, 1);
+  assert.equal(initialViolations[0].file, AVATAR_FILE);
+  assert.equal(initialViolations[0].line, 1);
+  assert.equal(initialViolations[0].rule, "avatar-contrast");
+  assert.match(initialViolations[0].message, /missing AVATAR_INITIAL_COLOR/);
+
+  const noPalette = 'export const AVATAR_INITIAL_COLOR = "#ffffff";';
+  const paletteViolations = checkAvatarPalette(noPalette);
+  assert.equal(paletteViolations.length, 1);
+  assert.equal(paletteViolations[0].line, 1);
+  assert.equal(paletteViolations[0].rule, "avatar-contrast");
+  assert.match(paletteViolations[0].message, /missing AVATAR_COLORS/);
+
+  const emptyPalette = [
+    'export const AVATAR_INITIAL_COLOR = "#ffffff";',
+    "export const AVATAR_COLORS = [] as const;",
+  ].join("\n");
+  const emptyViolations = checkAvatarPalette(emptyPalette);
+  assert.equal(emptyViolations.length, 1);
+  assert.match(emptyViolations[0].message, /missing AVATAR_COLORS/);
+});
+
+test("the real index.css and AdventurerSprite palette pass both rules", () => {
+  const css = readFileSync(
+    new URL("../apps/web/src/index.css", import.meta.url),
+    "utf8",
+  );
+  assert.deepEqual(checkTokens(css), []);
+
+  const sprite = readFileSync(
+    new URL("../apps/web/src/components/AdventurerSprite.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.deepEqual(checkAvatarPalette(sprite), []);
+});
+
+test("run appends rules 12-13 for the fixed palette files", () => {
+  const dir = makeRepo();
+  try {
+    const src = path.join(dir, "apps", "web", "src");
+    mkdirSync(path.join(src, "components"), { recursive: true });
+    writeFileSync(
+      path.join(src, "index.css"),
+      [
+        cssBlock("@theme static {", [
+          "--color-paper: #FFFFFF;",
+          "--color-ground: #FFFFFF;",
+          "--color-sunken: #FFFFFF;",
+          "--color-ink: #777777;",
+          "--color-muted: #000000;",
+          "--color-teal: #000000;",
+          "--color-gold: #000000;",
+          "--color-brick: #000000;",
+        ]),
+        // Dark overrides ink so only the light theme fails.
+        cssBlock('[data-theme="dark"] {', ["--color-ink: #000000;"]),
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      path.join(src, "components", "AdventurerSprite.tsx"),
+      [
+        'export const AVATAR_INITIAL_COLOR = "#ffffff";',
+        "",
+        "export const AVATAR_COLORS = [",
+        '  "#777777",',
+        "] as const;",
+      ].join("\n"),
+      "utf8",
+    );
+
+    assert.deepEqual(run(dir), [
+      {
+        file: AVATAR_FILE,
+        line: 4,
+        rule: "avatar-contrast",
+        message: "avatar contrast #777777/#ffffff = 4.48 (< 4.5)",
+      },
+      {
+        file: TOKEN_FILE,
+        line: 5,
+        rule: "contrast",
+        message: "contrast light ink/paper = 4.48 (< 4.5)",
+      },
+      {
+        file: TOKEN_FILE,
+        line: 5,
+        rule: "contrast",
+        message: "contrast light ink/ground = 4.48 (< 4.5)",
+      },
+      {
+        file: TOKEN_FILE,
+        line: 5,
+        rule: "contrast",
+        message: "contrast light ink/sunken = 4.48 (< 4.5)",
+      },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
