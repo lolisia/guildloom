@@ -98,10 +98,16 @@ const CREATED_QUEST: Quest = {
   createdBy: { id: 1, displayName: "김모험" },
   createdAt: NOW,
   updatedAt: NOW,
+  party: [],
+  pendingNominations: 0,
+  bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   projectId: 1,
   situation: "",
   direction: "",
   archiveReason: null,
+  nominations: [],
+  floors: [],
+  firstClaimedAt: null,
 };
 
 interface MockReply {

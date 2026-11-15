@@ -17,6 +17,7 @@ import {
   STAGES,
   archiveQuestRequestSchema,
   bulkCreateQuestsRequestSchema,
+  computeBounty,
   createQuestRequestSchema,
   listQuestsQuerySchema,
   moveQuestRequestSchema,
@@ -199,7 +200,13 @@ function loadTagNamesByQuest(
   return result;
 }
 
-/** Serialize a quest row plus its tag names into a board card. */
+/**
+ * Serialize a quest row plus its tag names into a board card.
+ *
+ * Party, floor progress, pending nomination counts and the bounty are computed
+ * live (M2). Until the party and floor read models land, the list emits empty
+ * scaffolding values.
+ */
 function toQuestSummary(
   entry: QuestWithCreator,
   tagNames: string[],
@@ -218,10 +225,24 @@ function toQuestSummary(
     },
     createdAt: entry.quest.createdAt,
     updatedAt: entry.quest.updatedAt,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: computeBounty({
+      rank: entry.quest.rank,
+      createdAt: entry.quest.createdAt,
+      firstClaimedAt: entry.quest.firstClaimedAt,
+      now: Date.now(),
+    }),
   };
 }
 
-/** Serialize a quest row plus tags/creator into the full detail shape. */
+/**
+ * Serialize a quest row plus tags/creator into the full detail shape.
+ *
+ * Detail-only party, nomination and floor collections are empty scaffolding
+ * here; the party/floor tasks replace them with the real read model.
+ */
 function toQuest(entry: QuestWithCreator, tagNames: string[]): Quest {
   return {
     ...toQuestSummary(entry, tagNames),
@@ -229,6 +250,10 @@ function toQuest(entry: QuestWithCreator, tagNames: string[]): Quest {
     situation: entry.quest.situation,
     direction: entry.quest.direction,
     archiveReason: entry.quest.archiveReason,
+    party: [],
+    nominations: [],
+    floors: [],
+    firstClaimedAt: entry.quest.firstClaimedAt,
   };
 }
 

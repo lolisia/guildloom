@@ -116,6 +116,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 3 * 86_400_000,
     updatedAt: NOW - 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   },
   {
     id: 2,
@@ -128,6 +132,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: NOW - 2 * 3_600_000,
     updatedAt: NOW - 2 * 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
   {
     id: 3,
@@ -140,6 +148,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 3, displayName: "루나" },
     createdAt: NOW - 30 * 60_000,
     updatedAt: NOW - 30 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 400, multiplier: 1, total: 400, days: 0, dusty: false },
   },
   {
     id: 4,
@@ -152,6 +164,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 5 * 60_000,
     updatedAt: NOW - 5 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 

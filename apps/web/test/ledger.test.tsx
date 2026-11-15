@@ -100,6 +100,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: Date.UTC(2026, 0, 2, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 4, 3, 0, 0),
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 80, multiplier: 1, total: 80, days: 0, dusty: false },
   },
   {
     id: 2,
@@ -112,6 +116,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: Date.UTC(2026, 0, 1, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 3, 3, 0, 0),
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 250, multiplier: 1, total: 250, days: 0, dusty: false },
   },
   {
     id: 3,
@@ -124,6 +132,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 3, displayName: "루나" },
     createdAt: Date.UTC(2026, 0, 3, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 5, 3, 0, 0),
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 
@@ -133,6 +145,26 @@ const QUEST_DETAIL: Quest = {
   situation: "상황",
   direction: "방향",
   archiveReason: null,
+  party: [
+    {
+      user: { id: 1, displayName: "김모험" },
+      role: "leader",
+      status: "done",
+      retreatReason: null,
+      joinedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
+    },
+  ],
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 상황 정리",
+      orderKey: "a0",
+      doneAt: Date.UTC(2026, 0, 4, 3, 0, 0),
+      doneBy: { id: 1, displayName: "김모험" },
+    },
+  ],
+  firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 
 const EVENTS: QuestEvent[] = [

@@ -169,13 +169,23 @@ export function QuestDrawer({
     mutationFn: () => archiveQuest(questId, { reason: "dropped" }),
     onSuccess: (archivedQuest) => {
       // Drop the card from board caches immediately; the refetch below is the
-      // source of truth once the server responds.
+      // source of truth once the server responds. Only summary-compatible
+      // fields are copied: the detail response carries PartyMember[]/Floor[]
+      // while list items carry PartySummary[]/{done,total}.
       queryClient.setQueriesData<QuestSummary[]>(
         { queryKey: ["quests", projectId] },
         (list) =>
           list?.map((summary) =>
             summary.id === archivedQuest.id
-              ? { ...summary, ...archivedQuest }
+              ? {
+                  ...summary,
+                  title: archivedQuest.title,
+                  stage: archivedQuest.stage,
+                  rank: archivedQuest.rank,
+                  orderKey: archivedQuest.orderKey,
+                  tags: archivedQuest.tags,
+                  updatedAt: archivedQuest.updatedAt,
+                }
               : summary,
           ),
       );

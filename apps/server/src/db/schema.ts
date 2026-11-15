@@ -12,7 +12,16 @@
  * This file and `apps/server/drizzle/` are owned by a single task. Other
  * modules never issue DDL or raw SQL; they go through the Drizzle schema.
  */
-import { RANKS, STAGES } from "@guildloom/shared";
+import {
+  MEMBER_STATUSES,
+  NOMINATION_KINDS,
+  NOMINATION_STATES,
+  NOTIFICATION_TYPES,
+  PARTY_ROLES,
+  RANKS,
+  STAGES,
+  XP_REASONS,
+} from "@guildloom/shared";
 import {
   index,
   integer,
@@ -116,6 +125,8 @@ export const quests = sqliteTable(
       .references(() => users.id),
     createdAt: integer("created_at", { mode: "number" }).notNull(),
     updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+    // When the first party member joined; freezes the bounty multiplier.
+    firstClaimedAt: integer("first_claimed_at", { mode: "number" }),
   },
   (table) => [
     unique("quests_project_id_number_unique").on(table.projectId, table.number),
@@ -180,6 +191,131 @@ export const questEvents = sqliteTable(
   (table) => [index("quest_events_quest_id_idx").on(table.questId)],
 );
 
+/**
+ * Quest party members (담당자).
+ *
+ * A retreated member keeps their row with `status = 'retreated'`; joining again
+ * updates the same `(quest_id, user_id)` row back to `joined`.
+ */
+export const partyMembers = sqliteTable(
+  "party_members",
+  {
+    questId: integer("quest_id")
+      .notNull()
+      .references(() => quests.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    role: text("role", { enum: PARTY_ROLES }).notNull(),
+    status: text("status", { enum: MEMBER_STATUSES }).notNull(),
+    retreatReason: text("retreat_reason"),
+    joinedAt: integer("joined_at", { mode: "number" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.questId, table.userId] }),
+    index("party_members_user_id_idx").on(table.userId),
+  ],
+);
+
+/** Nominations (지목): a suggestion, not an assignment. */
+export const questNominations = sqliteTable(
+  "quest_nominations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    questId: integer("quest_id")
+      .notNull()
+      .references(() => quests.id, { onDelete: "cascade" }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    nomineeId: integer("nominee_id")
+      .notNull()
+      .references(() => users.id),
+    nominatedBy: integer("nominated_by")
+      .notNull()
+      .references(() => users.id),
+    kind: text("kind", { enum: NOMINATION_KINDS }).notNull(),
+    state: text("state", { enum: NOMINATION_STATES }).notNull(),
+    passReason: text("pass_reason"),
+    // Set when the nomination was created by a relay (토스).
+    relayFromNominationId: integer("relay_from_nomination_id"),
+    createdAt: integer("created_at", { mode: "number" }).notNull(),
+    resolvedAt: integer("resolved_at", { mode: "number" }),
+  },
+  (table) => [
+    index("quest_nominations_nominee_state_idx").on(
+      table.nomineeId,
+      table.state,
+    ),
+    index("quest_nominations_quest_state_idx").on(table.questId, table.state),
+  ],
+);
+
+/** Floors (층) of a quest's dungeon. Display only; they never move a quest. */
+export const questFloors = sqliteTable(
+  "quest_floors",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    questId: integer("quest_id")
+      .notNull()
+      .references(() => quests.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    orderKey: text("order_key").notNull(),
+    doneAt: integer("done_at", { mode: "number" }),
+    doneBy: integer("done_by").references(() => users.id),
+    createdBy: integer("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: integer("created_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    index("quest_floors_quest_order_idx").on(table.questId, table.orderKey),
+  ],
+);
+
+/**
+ * XP ledger. `idem_key` makes every award idempotent, so replaying a clear or
+ * a relay accept can never pay twice. `project_id`/`quest_id` deliberately
+ * have no foreign keys so the history survives project or quest deletion.
+ */
+export const xpLedger = sqliteTable("xp_ledger", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  projectId: integer("project_id").notNull(),
+  questId: integer("quest_id"),
+  reason: text("reason", { enum: XP_REASONS }).notNull(),
+  amount: integer("amount").notNull(),
+  idemKey: text("idem_key").notNull().unique(),
+  createdAt: integer("created_at", { mode: "number" }).notNull(),
+});
+
+/** In-app notification inbox. `payload` is a JSON string. */
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    // Recipient.
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: integer("project_id").notNull(),
+    questId: integer("quest_id"),
+    type: text("type", { enum: NOTIFICATION_TYPES }).notNull(),
+    actorUserId: integer("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    payload: text("payload").notNull(),
+    createdAt: integer("created_at", { mode: "number" }).notNull(),
+    readAt: integer("read_at", { mode: "number" }),
+  },
+  (table) => [
+    index("notifications_user_read_idx").on(table.userId, table.readAt),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
@@ -189,3 +325,8 @@ export type QuestRow = typeof quests.$inferSelect;
 export type TagRow = typeof tags.$inferSelect;
 export type QuestTagRow = typeof questTags.$inferSelect;
 export type QuestEventRow = typeof questEvents.$inferSelect;
+export type PartyMemberRow = typeof partyMembers.$inferSelect;
+export type QuestNominationRow = typeof questNominations.$inferSelect;
+export type QuestFloorRow = typeof questFloors.$inferSelect;
+export type XpLedgerRow = typeof xpLedger.$inferSelect;
+export type NotificationRow = typeof notifications.$inferSelect;

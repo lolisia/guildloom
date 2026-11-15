@@ -104,6 +104,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 3 * 86_400_000,
     updatedAt: NOW - 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   },
   {
     id: 2,
@@ -116,6 +120,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: NOW - 2 * 3_600_000,
     updatedAt: NOW - 2 * 3_600_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
   {
     id: 3,
@@ -128,6 +136,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 3, displayName: "루나" },
     createdAt: NOW - 30 * 60_000,
     updatedAt: NOW - 30 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 400, multiplier: 1, total: 400, days: 0, dusty: false },
   },
   {
     id: 4,
@@ -140,6 +152,10 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: NOW - 5 * 60_000,
     updatedAt: NOW - 5 * 60_000,
+    party: [],
+    floors: { done: 0, total: 0 },
+    pendingNominations: 0,
+    bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
 ];
 
@@ -149,6 +165,26 @@ const QUEST_DETAIL: Quest = {
   situation: "첫 줄\n둘째 줄 https://example.com",
   direction: "다음 단계로 진행합니다.",
   archiveReason: null,
+  party: [
+    {
+      user: { id: 1, displayName: "김모험" },
+      role: "leader",
+      status: "fighting",
+      retreatReason: null,
+      joinedAt: NOW - 3 * 86_400_000,
+    },
+  ],
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 재현",
+      orderKey: "a0",
+      doneAt: NOW - 3_600_000,
+      doneBy: { id: 1, displayName: "김모험" },
+    },
+  ],
+  firstClaimedAt: NOW - 3 * 86_400_000,
 };
 
 const EVENTS: QuestEvent[] = [

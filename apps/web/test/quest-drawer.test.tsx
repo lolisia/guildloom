@@ -110,10 +110,32 @@ const QUEST: Quest = {
   createdBy: { id: 7, displayName: "김모험" },
   createdAt: CREATED_AT,
   updatedAt: CREATED_AT,
+  party: [
+    {
+      user: { id: 7, displayName: "김모험" },
+      role: "leader",
+      status: "fighting",
+      retreatReason: null,
+      joinedAt: CREATED_AT,
+    },
+  ],
+  pendingNominations: 0,
+  bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   projectId: 1,
   situation: "첫 줄\n둘째 줄 https://example.com",
   direction: "다음 단계로 진행합니다.",
   archiveReason: null,
+  nominations: [],
+  floors: [
+    {
+      id: 1,
+      title: "1층: 재현",
+      orderKey: "a0",
+      doneAt: null,
+      doneBy: null,
+    },
+  ],
+  firstClaimedAt: CREATED_AT,
 };
 
 const EVENTS: QuestEvent[] = [
@@ -454,6 +476,31 @@ describe("QuestDrawer design", () => {
       expect(
         within(dialog).getByText(formatKoreanDateTime(event.createdAt)),
       ).toBeInTheDocument();
+    }
+  });
+
+  it("maps every M2 event type to its icon", () => {
+    const expected: Partial<Record<QuestEvent["type"], string>> = {
+      nominated: "nominate",
+      reinforcement_requested: "reinforce",
+      claimed: "accept",
+      passed: "pass",
+      relayed: "relay",
+      member_joined: "joined",
+      member_left: "retreated",
+      member_status_changed: "fighting",
+      leader_changed: "party",
+      floor_added: "floor",
+      floor_checked: "floor",
+      boss_engaged: "boss",
+      retry_requested: "refresh",
+      quest_cleared: "cleared",
+    };
+
+    for (const [type, icon] of Object.entries(expected)) {
+      expect(
+        eventIcon({ ...EVENTS[0]!, type: type as QuestEvent["type"] }),
+      ).toBe(icon);
     }
   });
 
