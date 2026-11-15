@@ -156,3 +156,29 @@ body {
     animation: none;
   }
 }
+
+/*
+ * 던전 클리어! celebration. The banner fades/slides in for ~2s, then the drawer
+ * removes it. No gradient, glow or colour shadow — the paper card keeps the
+ * standard hard ink shadow. `prefers-reduced-motion` (below) shows it static.
+ */
+@keyframes gl-clear-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.clear-celebration {
+  animation: gl-clear-banner-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clear-celebration {
+    animation: none;
+  }
+}

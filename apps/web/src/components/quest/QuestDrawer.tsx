@@ -3,11 +3,14 @@
  * `?quest=<id>` URL query.
  *
  * The drawer owns the detail and event queries for one quest, inline edits
- * (title, rank, tags, situation, direction) and the archive flow. Scalar
- * mutations update the quest cache from the server response and invalidate the
- * board and ledger lists so cards stay in sync. Tags go through a dedicated
- * optimistic mutation so rapid chip edits accumulate locally instead of
- * racing stale server state.
+ * (title, rank, tags, situation, direction), the dungeon floor checklist, the
+ * boss clear/retry actions and the archive flow. Scalar mutations update the
+ * quest cache from the server response and invalidate the board and ledger
+ * lists so cards stay in sync. Tags go through a dedicated optimistic mutation
+ * so rapid chip edits accumulate locally instead of racing stale server state.
+ *
+ * Declaring a clear celebrates the caller's own reward for ~2s and opens the
+ * LEVEL UP modal when the settlement reports a level transition for them.
  *
  * Layout follows DESIGN.md: the page is dimmed with the theme-aware `scrim`
  * token (never a blur) and a paper panel slides in from the right behind a
@@ -25,23 +28,32 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { createPortal } from "react-dom";
 
+import { fetchMe } from "../../api/auth";
 import {
   archiveQuest,
+  clearQuest,
   fetchEvents,
   fetchQuest,
   updateQuest,
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
 import { isImeComposing } from "../../lib/ime";
+import { useLevelUpStore } from "../../lib/levelUp";
 import { queryKeys } from "../../lib/queryKeys";
 import Icon from "../Icon";
 import RankBadge from "../RankBadge";
 import { Button, TextInput } from "../ui";
+import BossBanner from "./BossBanner";
 import DungeonView from "./DungeonView";
 import EditableTextSection from "./EditableTextSection";
 import EventTimeline from "./EventTimeline";
 import PartySection from "./PartySection";
+import { invalidatePartyQueries } from "./partyCache";
+import QuestFloors from "./QuestFloors";
 import TagEditor from "./TagEditor";
+
+/** How long the 던전 클리어! celebration stays on screen. */
+export const CLEAR_CELEBRATION_MS = 2_000;
 
 /** Props for {@link QuestDrawer}. */
 export interface QuestDrawerProps {
@@ -54,6 +66,11 @@ export interface QuestDrawerProps {
 /** Snapshot needed to roll an optimistic tag edit back on failure. */
 interface TagMutationContext {
   previous: Quest | undefined;
+}
+
+/** The caller's own reward, shown in the clear celebration. */
+interface ClearCelebration {
+  amount: number | null;
 }
 
 /** Slide-over quest detail panel. */
@@ -76,10 +93,32 @@ export function QuestDrawer({
     queryFn: ({ signal }) => fetchEvents(questId, signal),
   });
 
+  const meQuery = useQuery({
+    queryKey: queryKeys.me,
+    queryFn: ({ signal }) => fetchMe(signal),
+    retry: false,
+  });
+  const meId = meQuery.data?.user.id ?? null;
+  const showLevelUp = useLevelUpStore((state) => state.show);
+
   const quest = questQuery.data;
   const [titleDraft, setTitleDraft] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [celebration, setCelebration] = useState<ClearCelebration | null>(
+    null,
+  );
   const seededQuestId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!celebration) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setCelebration(null),
+      CLEAR_CELEBRATION_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [celebration]);
 
   useEffect(() => {
     if (quest && seededQuestId.current !== quest.id) {
@@ -202,6 +241,39 @@ export function QuestDrawer({
     },
   });
 
+  const clearMutation = useMutation({
+    mutationFn: () => clearQuest(questId),
+    onSuccess: (result) => {
+      queryClient.setQueryData(queryKeys.quest(questId), result.quest);
+      invalidatePartyQueries(queryClient, projectId, questId);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.project(projectId),
+      });
+
+      const cachedMe = queryClient.getQueryData<{
+        user: { id: number };
+      }>(queryKeys.me);
+      const currentMeId = cachedMe?.user.id ?? meId;
+      const myReward =
+        currentMeId === null
+          ? null
+          : result.rewards
+              .filter((reward) => reward.userId === currentMeId)
+              .reduce((total, reward) => total + reward.amount, 0);
+      setCelebration({ amount: myReward });
+
+      if (currentMeId !== null) {
+        const levelUp = result.levelUps.find(
+          (entry) => entry.userId === currentMeId,
+        );
+        if (levelUp) {
+          showLevelUp(levelUp);
+        }
+      }
+    },
+  });
+
   const commitTitle = () => {
     if (!quest) {
       return;
@@ -271,6 +343,16 @@ export function QuestDrawer({
 
           {quest ? (
             <>
+              {quest.stage === "boss" ? (
+                <BossBanner
+                  projectId={projectId}
+                  quest={quest}
+                  onClear={() => clearMutation.mutate()}
+                  clearPending={clearMutation.isPending}
+                  clearError={clearMutation.error}
+                />
+              ) : null}
+
               <DungeonView quest={quest} />
 
               <PartySection projectId={projectId} quest={quest} />
@@ -375,6 +457,8 @@ export function QuestDrawer({
                 disabled={updateMutation.isPending}
               />
 
+              <QuestFloors projectId={projectId} quest={quest} />
+
               <EventTimeline
                 events={eventsQuery.data}
                 isPending={eventsQuery.isPending}
@@ -385,9 +469,14 @@ export function QuestDrawer({
         </div>
 
         {quest ? (
-          <footer className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
+          <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3">
             <div className="min-w-0 text-xs text-muted">
-              {updateMutation.isError ? (
+              {clearMutation.isError &&
+              (quest.stage === "board" || quest.stage === "dungeon") ? (
+                <p role="alert" className="text-brick">
+                  {ko.board.drawer.clear.failed}
+                </p>
+              ) : updateMutation.isError ? (
                 <p role="alert" className="text-brick">
                   {ko.quest.updateFailed}
                 </p>
@@ -399,20 +488,59 @@ export function QuestDrawer({
                 </p>
               )}
             </div>
-            <Button
-              variant="danger"
-              icon="dropped"
-              onClick={() => {
-                archiveMutation.reset();
-                setConfirmArchive(true);
-              }}
-              className="shrink-0"
-            >
-              {ko.board.drawer.archive}
-            </Button>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {quest.stage === "board" || quest.stage === "dungeon" ? (
+                <Button
+                  variant="primary"
+                  icon="cleared"
+                  disabled={clearMutation.isPending || archiveMutation.isPending}
+                  onClick={() => clearMutation.mutate()}
+                >
+                  {clearMutation.isPending
+                    ? ko.board.drawer.clear.working
+                    : ko.board.drawer.clear.action}
+                </Button>
+              ) : null}
+              <Button
+                variant="danger"
+                icon="dropped"
+                onClick={() => {
+                  archiveMutation.reset();
+                  setConfirmArchive(true);
+                }}
+                disabled={clearMutation.isPending}
+              >
+                {ko.board.drawer.archive}
+              </Button>
+            </div>
           </footer>
         ) : null}
       </aside>
+
+      {celebration ? (
+        <div
+          data-testid="clear-celebration"
+          className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4"
+        >
+          <div
+            role="status"
+            className="clear-celebration flex items-center gap-3 rounded-sm border-[1.5px] border-line-strong bg-paper px-4 py-3 shadow-hard"
+          >
+            <Icon name="cleared" size={64} />
+            <div className="flex flex-col gap-1">
+              <p className="font-pixel text-[22px] leading-tight text-ink">
+                {ko.board.drawer.clear.celebrationTitle}
+              </p>
+              {celebration.amount !== null ? (
+                <p className="flex items-center gap-1 font-pixel text-[16px] text-gold">
+                  <Icon name="xp" size={32} />
+                  {ko.board.drawer.clear.reward(celebration.amount)}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {confirmArchive ? (
         <div

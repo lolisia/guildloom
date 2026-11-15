@@ -8,12 +8,14 @@
 import type {
   ArchiveQuestRequest,
   BulkCreateQuestsRequest,
+  ClearQuestResponse,
   CreateQuestRequest,
   ListQuestsQuery,
   MoveQuestRequest,
   Quest,
   QuestEventsResponse,
   QuestListResponse,
+  RetryQuestRequest,
   TagListResponse,
   UpdateQuestRequest,
 } from "@guildloom/shared";
@@ -132,6 +134,36 @@ export function archiveQuest(
   signal?: AbortSignal,
 ): Promise<Quest> {
   return apiFetch<Quest>(`/quests/${questId}/archive`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+/**
+ * `POST /api/quests/:questId/clear` — declare the dungeon clear.
+ *
+ * The response carries the settled quest, the XP actually paid to each
+ * participant and every level transition, so the drawer can celebrate the
+ * caller's own reward without a second request.
+ */
+export function clearQuest(
+  questId: number,
+  signal?: AbortSignal,
+): Promise<ClearQuestResponse> {
+  return apiFetch<ClearQuestResponse>(`/quests/${questId}/clear`, {
+    method: "POST",
+    signal,
+  });
+}
+
+/** `POST /api/quests/:questId/retry` — send a boss quest back to the dungeon. */
+export function retryQuest(
+  questId: number,
+  body: RetryQuestRequest,
+  signal?: AbortSignal,
+): Promise<Quest> {
+  return apiFetch<Quest>(`/quests/${questId}/retry`, {
     method: "POST",
     body,
     signal,
