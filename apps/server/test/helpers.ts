@@ -34,15 +34,28 @@ export interface TestApp {
   close(): Promise<void>;
 }
 
+/** Options for {@link createTestApp}. */
+export interface CreateTestAppOptions {
+  /**
+   * Attach the Socket.IO realtime server (default: false).
+   *
+   * Most tests only use `app.inject()` and do not need websockets; the
+   * realtime tests opt in explicitly.
+   */
+  realtime?: boolean;
+}
+
 /**
  * Build an app backed by a fresh `:memory:` database.
  *
  * `close()` shuts down Fastify first so in-flight handlers finish before the
  * SQLite connection is closed.
  */
-export async function createTestApp(): Promise<TestApp> {
+export async function createTestApp(
+  options: CreateTestAppOptions = {},
+): Promise<TestApp> {
   const { db, sqlite, close: closeDb } = openDb(":memory:");
-  const app = await buildApp({ db });
+  const app = await buildApp({ db, realtime: options.realtime ?? false });
 
   return {
     app,

@@ -355,7 +355,7 @@ describe("buildApp", () => {
 
   it("sets a 30-day httpOnly cookie and adds Secure behind HTTPS", async () => {
     const { db, close } = openDb(":memory:");
-    const app = await buildApp({ db, trustProxy: true });
+    const app = await buildApp({ db, trustProxy: true, realtime: false });
     try {
       const user = createUser(db);
       app.get("/test-login/:userId", async (request, reply) => {

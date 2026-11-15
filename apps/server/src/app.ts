@@ -17,6 +17,7 @@ import { ZodError } from "zod";
 
 import type { AppDb } from "./db/index.js";
 import { HttpError, sendApiError } from "./lib/errors.js";
+import { attachRealtime, noopRealtime } from "./lib/realtime.js";
 import { authRoutes } from "./routes/auth.js";
 import { inviteRoutes } from "./routes/invites.js";
 import { projectRoutes } from "./routes/projects.js";
@@ -35,6 +36,12 @@ export interface BuildAppOptions {
   webDistPath?: string;
   /** Enable Fastify's logger (default: false). */
   logger?: boolean;
+  /**
+   * Attach the Socket.IO realtime server on `/socket.io` and use the real
+   * broadcaster (default: true). When false, `app.realtime` is a no-op and no
+   * websocket server is attached.
+   */
+  realtime?: boolean;
 }
 
 /** Render a request-validation failure into a single human readable message. */
@@ -77,6 +84,21 @@ export async function buildApp(
 
   await app.register(cookie);
   app.decorate("db", options.db);
+
+  if (options.realtime ?? true) {
+    const attached = attachRealtime(app.server, options.db);
+    app.decorate("realtime", attached.realtime);
+    // `preClose` (not `onClose`) is required here: Fastify's own close hook,
+    // registered at `preReady`, calls `server.close()` before user `onClose`
+    // hooks run (they are LIFO), and that call waits for the open websockets
+    // that only `io.close()` would disconnect. `preClose` runs before
+    // `server.close()`, so closing the io server always completes.
+    app.addHook("preClose", async () => {
+      await attached.close();
+    });
+  } else {
+    app.decorate("realtime", noopRealtime);
+  }
 
   if (options.webDistPath) {
     await registerSpaStatic(app, options.webDistPath);

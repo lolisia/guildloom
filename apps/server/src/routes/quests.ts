@@ -670,14 +670,20 @@ function neighborOrderKey(
   return neighbor.orderKey;
 }
 
+/** Result of a move: the reloaded quest and whether its stage changed. */
+interface MoveQuestResult {
+  quest: Quest;
+  stageChanged: boolean;
+}
+
 /** Apply `POST /api/quests/:id/move`. */
 function moveQuest(
   db: AppDb,
   questId: number,
   actor: UserRow,
   body: MoveQuestRequest,
-): Quest {
-  db.transaction((tx) => {
+): MoveQuestResult {
+  const stageChanged = db.transaction((tx) => {
     const quest = requireQuest(tx, questId, actor.id);
     const targetStage = body.stage;
 
@@ -726,9 +732,11 @@ function moveQuest(
         createdAt: Date.now(),
       });
     }
+
+    return quest.stage !== targetStage;
   });
 
-  return loadQuestView(db, questId);
+  return { quest: loadQuestView(db, questId), stageChanged };
 }
 
 /** Apply `POST /api/quests/:id/archive`. */
@@ -833,6 +841,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
       const { pid } = request.params;
       requireProject(request.server.db, pid, user.id);
       const quest = createQuest(request.server.db, pid, user, request.body);
+      request.server.realtime.emitQuestChanged(pid, quest.id);
       reply.code(201);
       return quest;
     },
@@ -858,6 +867,9 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
         user,
         request.body,
       );
+      for (const quest of created) {
+        request.server.realtime.emitQuestChanged(pid, quest.id);
+      }
       reply.code(201);
       return created;
     },
@@ -891,12 +903,14 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      return updateQuestDetails(
+      const quest = updateQuestDetails(
         request.server.db,
         request.params.id,
         user,
         request.body,
       );
+      request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
+      return quest;
     },
   );
 
@@ -912,12 +926,16 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      return moveQuest(
+      const { quest, stageChanged } = moveQuest(
         request.server.db,
         request.params.id,
         user,
         request.body,
       );
+      if (stageChanged) {
+        request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
+      }
+      return quest;
     },
   );
 
@@ -933,12 +951,14 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      return archiveQuest(
+      const quest = archiveQuest(
         request.server.db,
         request.params.id,
         user,
         request.body ?? {},
       );
+      request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
+      return quest;
     },
   );
 
