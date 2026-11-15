@@ -405,7 +405,22 @@ describe("board design", () => {
     expect(time).toHaveClass("text-[12px]", "text-muted");
     expect(time).toHaveTextContent("3일 전");
 
-    expect(card.querySelector('[data-user-id="1"]')).toHaveClass(
+    // A board-stage card without an active party shows the dashed 빈 파티
+    // placeholder instead of the creator avatar.
+    expect(card.querySelector('[data-user-id="1"]')).toBeNull();
+    expect(within(card).getByTestId("empty-party")).toHaveTextContent(
+      ko.quest.emptyParty,
+    );
+    expect(within(card).getByTestId("empty-party")).toHaveClass(
+      "border-dashed",
+      "border-[1.5px]",
+    );
+
+    // Other stages keep the creator avatar at the sm (32px) size.
+    const clearedCard = container.querySelector(
+      '[data-quest-id="4"]',
+    ) as HTMLElement;
+    expect(clearedCard.querySelector('[data-user-id="1"]')).toHaveClass(
       "h-8",
       "w-8",
     );
@@ -435,8 +450,18 @@ describe("board design", () => {
       }),
     );
 
+    stubFetch(boardHandler());
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity, gcTime: Infinity },
+        mutations: { retry: false },
+      },
+    });
+
     const { container } = render(
-      <QuestCard quest={QUESTS[0]!} onOpen={() => {}} />,
+      <QueryClientProvider client={queryClient}>
+        <QuestCard quest={QUESTS[0]!} onOpen={() => {}} />
+      </QueryClientProvider>,
     );
     const card = container.querySelector(
       '[data-quest-id="1"]',

@@ -765,7 +765,16 @@ describe("TabBar", () => {
     const view = renderApp("/g/1", { me: HERO });
     const { queryClient, user } = view;
 
-    await view.findByRole("button", { name: ko.tabs.logout });
+    // Wait for the guild list so its initial fetch can no longer land after
+    // the logout assertions.
+    await view.findByRole("link", { name: "달빛 길드" });
+    const projectReads = () =>
+      view.fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url) === "/api/projects" &&
+          (init?.method ?? "GET") === "GET",
+      ).length;
+    const readsBeforeLogout = projectReads();
 
     // A query cache lives for the whole app session (the test client keeps
     // data forever), so seed what the bell and inline actions would cache.
@@ -784,6 +793,9 @@ describe("TabBar", () => {
     expect(queryClient.getQueryData(queryKeys.notifications)).toBeUndefined();
     expect(queryClient.getQueryData(queryKeys.myNominations)).toBeUndefined();
     expect(queryClient.getQueryData(queryKeys.projects)).toBeUndefined();
+    // The last render of the signed-in shell must not restart the guild
+    // query after its cache was removed.
+    expect(projectReads()).toBe(readsBeforeLogout);
   });
 });
 
@@ -977,6 +989,9 @@ describe("ko copy", () => {
       number: "번호",
       title: "제목",
       tags: "태그",
+      party: "파티",
+      bounty: "현상금",
+      floors: "층",
       stage: "단계",
       rank: "등급",
       createdBy: "작성자",

@@ -1,9 +1,9 @@
 // @vitest-environment node
 /**
- * Ledger table tests: the eight exact columns, the design-system table surface
- * (sunken header, line separators), stage/rank/avatar cells, text/tag/search
- * filtering, client-side header sorting and opening the shared quest drawer
- * from a row.
+ * Ledger table tests: the eleven exact columns, the design-system table surface
+ * (sunken header, line separators), stage/rank/avatar cells, the M2a party,
+ * bounty and floor columns, text/tag/search filtering, client-side header
+ * sorting and opening the shared quest drawer from a row.
  *
  * As in the other DOM tests, jsdom is installed manually because Vitest cannot
  * resolve the workspace-local copy from the hoisted runner.
@@ -100,8 +100,15 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 1, displayName: "김모험" },
     createdAt: Date.UTC(2026, 0, 2, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 4, 3, 0, 0),
-    party: [],
-    floors: { done: 0, total: 0 },
+    party: [
+      {
+        userId: 3,
+        displayName: "하늘",
+        role: "leader",
+        status: "fighting",
+      },
+    ],
+    floors: { done: 1, total: 4 },
     pendingNominations: 0,
     bounty: { base: 80, multiplier: 1, total: 80, days: 0, dusty: false },
   },
@@ -116,10 +123,17 @@ const QUESTS: QuestSummary[] = [
     createdBy: { id: 2, displayName: "아린" },
     createdAt: Date.UTC(2026, 0, 1, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 3, 3, 0, 0),
-    party: [],
-    floors: { done: 0, total: 0 },
+    party: [
+      {
+        userId: 2,
+        displayName: "가온",
+        role: "leader",
+        status: "done",
+      },
+    ],
+    floors: { done: 2, total: 3 },
     pendingNominations: 0,
-    bounty: { base: 250, multiplier: 1, total: 250, days: 0, dusty: false },
+    bounty: { base: 250, multiplier: 1.2, total: 300, days: 1, dusty: false },
   },
   {
     id: 3,
@@ -133,7 +147,7 @@ const QUESTS: QuestSummary[] = [
     createdAt: Date.UTC(2026, 0, 3, 3, 0, 0),
     updatedAt: Date.UTC(2026, 0, 5, 3, 0, 0),
     party: [],
-    floors: { done: 0, total: 0 },
+    floors: { done: 1, total: 2 },
     pendingNominations: 0,
     bounty: { base: 40, multiplier: 1, total: 40, days: 0, dusty: false },
   },
@@ -307,19 +321,33 @@ afterEach(() => {
 });
 
 describe("LedgerPage", () => {
-  it("renders the eight exact columns with Korean dates", async () => {
+  it("renders the eleven exact columns with Korean dates", async () => {
     stubFetch(defaultHandler());
     const { container } = renderLedger();
 
     await screen.findByText("Alpha");
 
     const headers = screen.getAllByRole("columnheader");
-    expect(headers).toHaveLength(8);
+    expect(headers).toHaveLength(11);
     for (const label of Object.values(ko.ledger.columns)) {
       expect(
         screen.getByRole("button", { name: ko.ledger.sortBy(label) }),
       ).toBeInTheDocument();
     }
+    // Title stays second; the M2a party/bounty/floors columns follow tags.
+    expect(headers.map((header) => header.textContent?.trim())).toEqual([
+      ko.ledger.columns.number,
+      ko.ledger.columns.title,
+      ko.ledger.columns.tags,
+      ko.ledger.columns.party,
+      ko.ledger.columns.bounty,
+      ko.ledger.columns.floors,
+      ko.ledger.columns.stage,
+      ko.ledger.columns.rank,
+      ko.ledger.columns.createdBy,
+      ko.ledger.columns.createdAt,
+      ko.ledger.columns.updatedAt,
+    ]);
 
     expect(rowTitles(container)).toEqual(["Alpha", "Beta", "Gamma"]);
     expect(
@@ -363,16 +391,16 @@ describe("LedgerPage", () => {
     );
     expect(row).not.toBeNull();
     const cells = row!.querySelectorAll<HTMLTableCellElement>("td");
-    expect(cells).toHaveLength(8);
+    expect(cells).toHaveLength(11);
 
-    const stageCell = cells[3]!;
+    const stageCell = cells[6]!;
     expect(stageCell.querySelector("img")).toHaveAttribute(
       "src",
       expect.stringContaining("board.png"),
     );
     expect(stageCell).toHaveTextContent(ko.quest.stages.board);
 
-    const rankCell = cells[4]!;
+    const rankCell = cells[7]!;
     const rank = rankCell.querySelector("[data-rank]");
     expect(rank).toHaveAttribute("data-rank", "C");
     expect(rank?.querySelector("img")).toHaveAttribute(
@@ -380,7 +408,7 @@ describe("LedgerPage", () => {
       expect.stringContaining("rank-c.png"),
     );
 
-    const authorCell = cells[5]!;
+    const authorCell = cells[8]!;
     const avatar = authorCell.querySelector("[data-user-id='1']");
     expect(avatar).toBeInTheDocument();
     expect(avatar?.className).toContain("rounded-sm");
@@ -544,6 +572,73 @@ describe("LedgerPage", () => {
     await user.click(titleHeader);
     await waitFor(() =>
       expect(rowTitles(container)).toEqual(["Alpha", "Beta", "Gamma"]),
+    );
+  });
+
+  it("shows party names, gold bounties and floor progress", async () => {
+    stubFetch(defaultHandler());
+    const { container } = renderLedger();
+
+    await screen.findByText("Alpha");
+
+    const alphaCells = container
+      .querySelector('tbody tr[data-quest-id="1"]')!
+      .querySelectorAll<HTMLTableCellElement>("td");
+    expect(alphaCells[3]).toHaveTextContent("하늘");
+    expect(alphaCells[4]).toHaveClass("font-pixel", "text-xs", "text-gold");
+    expect(alphaCells[4]).toHaveTextContent("80");
+    expect(alphaCells[5]).toHaveClass("font-pixel", "text-xs");
+    expect(alphaCells[5]).toHaveTextContent("1/4");
+
+    const betaCells = container
+      .querySelector('tbody tr[data-quest-id="2"]')!
+      .querySelectorAll<HTMLTableCellElement>("td");
+    expect(betaCells[3]).toHaveTextContent("가온");
+    expect(betaCells[4]).toHaveTextContent("300");
+    expect(betaCells[5]).toHaveTextContent("2/3");
+
+    const gammaCells = container
+      .querySelector('tbody tr[data-quest-id="3"]')!
+      .querySelectorAll<HTMLTableCellElement>("td");
+    expect(gammaCells[3]).toHaveTextContent(ko.quest.emptyParty);
+    expect(gammaCells[4]).toHaveTextContent("40");
+    expect(gammaCells[5]).toHaveTextContent("1/2");
+  });
+
+  it("sorts by party, bounty and floor progress", async () => {
+    stubFetch(defaultHandler());
+    const { container, user } = renderLedger();
+
+    await screen.findByText("Alpha");
+    expect(rowTitles(container)).toEqual(["Alpha", "Beta", "Gamma"]);
+
+    const partyHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.party),
+    });
+    await user.click(partyHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Gamma", "Beta", "Alpha"]),
+    );
+
+    const bountyHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.bounty),
+    });
+    await user.click(bountyHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Gamma", "Alpha", "Beta"]),
+    );
+
+    const floorsHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.floors),
+    });
+    await user.click(floorsHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Gamma", "Alpha", "Beta"]),
+    );
+
+    await user.click(floorsHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Beta", "Alpha", "Gamma"]),
     );
   });
 

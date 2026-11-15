@@ -7,7 +7,7 @@
  * labels, the drawer labels, the ledger column labels and the relative-time
  * helpers are part of the T06 interface and must not be renamed.
  */
-import type { Notification } from "@guildloom/shared";
+import { MEMBER_STATUS_LABELS, type Notification } from "@guildloom/shared";
 
 /** Confirm prompt shown before bulk-creating quests from pasted titles. */
 const bulkConfirm = (count: number): string =>
@@ -300,6 +300,15 @@ export const ko = {
     rank: "등급",
     rankNone: "등급 없음",
     stage: "단계",
+    party: "파티",
+    partyLeader: "파티장",
+    emptyParty: "빈 파티",
+    memberStatuses: MEMBER_STATUS_LABELS,
+    floors: "층",
+    bounty: "현상금",
+    bountyMultiplier: (multiplier: number): string => `×${multiplier}`,
+    pendingNominations: "지목 대기",
+    dusty: "먼지 쌓인 의뢰",
     createdBy: "작성자",
     createdAt: "등록일",
     updatedAt: "수정일",
@@ -347,6 +356,9 @@ export const ko = {
       number: "번호",
       title: "제목",
       tags: "태그",
+      party: "파티",
+      bounty: "현상금",
+      floors: "층",
       stage: "단계",
       rank: "등급",
       createdBy: "작성자",

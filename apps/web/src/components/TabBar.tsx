@@ -63,16 +63,22 @@ export function TabBar() {
   const dialogTitleId = useId();
   const guildNameInputId = useId();
 
-  const projectsQuery = useQuery({
-    queryKey: queryKeys.projects,
-    queryFn: ({ signal }) => fetchProjects(signal),
-    retry: false,
-  });
-
   const meQuery = useQuery({
     queryKey: queryKeys.me,
     queryFn: ({ signal }) => fetchMe(signal),
     retry: false,
+  });
+  const user = meQuery.data?.user ?? null;
+
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects,
+    queryFn: ({ signal }) => fetchProjects(signal),
+    retry: false,
+    // Belt and braces around logout: the settled handler removes every guild
+    // query, and the brief render before the route swaps to /login must not
+    // rebuild the project cache (and fire a 401 request). Only a signed-in
+    // adventurer needs the guild list.
+    enabled: user !== null,
   });
 
   const createMutation = useMutation({
@@ -104,7 +110,6 @@ export function TabBar() {
   });
 
   const projects: ProjectSummary[] = projectsQuery.data ?? [];
-  const user = meQuery.data?.user ?? null;
   const progress = user ? levelProgress(user.xp) : null;
   const level = user ? levelFromXp(user.xp) : null;
   const xpPercent =

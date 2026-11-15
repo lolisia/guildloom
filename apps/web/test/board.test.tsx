@@ -350,7 +350,20 @@ describe("BoardPage", () => {
     expect(screen.getByText("보스 의뢰")).toBeInTheDocument();
     expect(screen.getByText("클리어 의뢰")).toBeInTheDocument();
 
-    const creatorSprite = container.querySelector('[data-user-id="1"]');
+    // Quest 1 sits on the board stage with an empty party, so its creator
+    // avatar is replaced by the dashed 빈 파티 placeholder. Quest 4 (cleared,
+    // also created by user 1) keeps the normal creator sprite.
+    const boardCard = container.querySelector<HTMLElement>(
+      '[data-quest-id="1"]',
+    );
+    expect(boardCard).not.toBeNull();
+    expect(within(boardCard!).getByTestId("empty-party")).toHaveTextContent(
+      ko.quest.emptyParty,
+    );
+    expect(boardCard?.querySelector('[data-user-id="1"]')).toBeNull();
+
+    const clearedCard = container.querySelector('[data-quest-id="4"]');
+    const creatorSprite = clearedCard?.querySelector('[data-user-id="1"]');
     expect(creatorSprite).not.toBeNull();
     expect(creatorSprite).toHaveClass("h-8", "w-8");
 
