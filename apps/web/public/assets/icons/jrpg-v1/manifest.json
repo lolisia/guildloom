@@ -3,6 +3,12 @@
   "version": 1,
   "size": 32,
   "scale2x": 64,
+  "outline": {
+    "color": "#191923",
+    "width": 1,
+    "width2x": 2,
+    "method": "native pixel contours and interior strokes on a 32px grid"
+  },
   "baseUrl": "/assets/icons/jrpg-v1/",
   "palette": [
     "#191923",

@@ -1,6 +1,6 @@
 # guildloom JRPG icon resources v1
 
-96 icons in six groups: guild/quest, workflow/rumor, editing/actions, account/media, ranks/judgements, navigation. Generated with built-in image_gen in the approved low-resolution JRPG style, then sliced, centered, resampled using nearest neighbor, and normalized to a shared 32-color palette.
+The pack contains 96 JRPG pixel icons for guilds, quests, actions, accounts, ranks and navigation. Each icon is drawn by script on a 32×32 pixel grid using the shared palette. Outlines, lettering and highlights are placed at native resolution. The 64px files enlarge each source pixel to a 2×2 block.
 
 ## Files
 
@@ -43,4 +43,4 @@ The base size is 32px, and `.gl-icon--2x` uses 64px. Prefer integer multiples of
 
 Paths in `icons` are relative to `baseUrl`. With a custom Vite deployment base, prepend `import.meta.env.BASE_URL` to `assets/icons/jrpg-v1/` instead of hard-coding an origin-root path. Rank fallback is `rank-none`; aliases resolve to canonical icon IDs and are not additional PNG files. An alias uses the canonical CSS class, e.g. `cancel` resolves to `gl-icon--close`.
 
-The resources cover the current M1 screens plus the party, rumor, messenger, attachment and familiar features in the project specification. Their presence does not imply those application features are implemented. These assets do not replace current UI icons automatically.
+The resources cover the current M1 screens plus the party, rumor, messenger, attachment and familiar features in the project specification. Their presence does not imply those application features are implemented. The app’s Icon component loads individual PNGs by ID.
