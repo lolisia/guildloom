@@ -88,6 +88,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
   const showEmptyParty = quest.stage === "board" && quest.party.length === 0;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // rules-allow ime-enter: 텍스트 입력이 아닌 카드 키보드 활성화
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onOpen(quest.id);

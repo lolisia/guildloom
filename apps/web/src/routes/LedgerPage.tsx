@@ -364,7 +364,7 @@ export default function LedgerPage() {
                       type="button"
                       onClick={() => toggleSort(column)}
                       aria-label={ko.ledger.sortBy(ko.ledger.columns[column])}
-                      className="inline-flex items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left font-pixel text-xs text-muted hover:text-ink"
+                      className="inline-flex items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left font-pixel text-[12px] text-muted hover:text-ink"
                     >
                       {ko.ledger.columns[column]}
                       {activeDirection ? (
@@ -427,7 +427,7 @@ export default function LedgerPage() {
                 }}
                 className="cursor-pointer border-b border-line align-middle transition-colors hover:bg-sunken focus-visible:bg-sunken"
               >
-                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-muted">
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-[12px] text-muted">
                   #{quest.number}
                 </td>
                 <td className="max-w-64 px-2 py-2 text-sm font-medium text-ink">
@@ -467,10 +467,10 @@ export default function LedgerPage() {
                     </span>
                   )}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-gold">
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-[12px] text-gold">
                   {formatBounty(quest.bounty.total)}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 font-pixel text-xs text-ink">
+                <td className="whitespace-nowrap px-2 py-2 font-pixel text-[12px] text-ink">
                   {quest.floors.done}/{quest.floors.total}
                 </td>
                 <td className="whitespace-nowrap px-2 py-2">

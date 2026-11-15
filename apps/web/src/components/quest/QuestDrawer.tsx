@@ -365,7 +365,7 @@ export function QuestDrawer({
                   {ko.quest.titleLabel}
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="shrink-0 font-pixel text-xs text-muted">
+                  <span className="shrink-0 font-pixel text-[12px] text-muted">
                     #{quest.number}
                   </span>
                   <TextInput
