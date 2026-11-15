@@ -6,12 +6,14 @@
  * adventurer may also toss the nomination to another guild member, excluding
  * the caller (`excludeUserIds`) and themselves.
  *
- * Submitting calls `POST /api/nominations/:id/pass`, then invalidates the
- * nomination/notification/board caches before closing.
+ * Submitting calls `POST /api/nominations/:id/pass`; the returned quest seeds
+ * the detail cache and the board/detail/event/nomination/notification queries
+ * are invalidated before the dialog closes.
  */
 import {
   PASS_REASON_PRESETS,
   type PassNominationRequest,
+  type Quest,
 } from "@guildloom/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
@@ -22,6 +24,8 @@ import { pass } from "../api/party";
 import { fetchProject } from "../api/projects";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
+import { applyQuestUpdate } from "./quest/partyCache";
+import { partyErrorMessage } from "./quest/partyError";
 import { Button, TextInput } from "./ui";
 
 /** Custom pass-reason limit enforced by the server contract. */
@@ -37,8 +41,8 @@ export interface PassReasonDialogProps {
   excludeUserIds?: number[];
   /** Close the dialog without submitting. */
   onClose: () => void;
-  /** Called after a successful pass, before {@link PassReasonDialogProps.onClose}. */
-  onPassed?: () => void;
+  /** Called with the updated quest after a successful pass, before closing. */
+  onPassed?: (quest: Quest) => void;
 }
 
 /** Preset-or-custom pass reason plus an optional toss recipient. */
@@ -73,23 +77,26 @@ export function PassReasonDialog({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
+        // Capture phase: dismiss only this dialog, not a surrounding drawer.
+        event.stopPropagation();
         onClose();
       }
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [onClose]);
 
   const passMutation = useMutation({
     mutationFn: (body: PassNominationRequest) => pass(nominationId, body),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.myNominations }),
-        queryClient.invalidateQueries({ queryKey: ["quests", projectId] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.project(projectId) }),
-      ]);
-      onPassed?.();
+    onSuccess: async (updated) => {
+      // The pass answers with the quest detail (AUTO transitions included), so
+      // seed that cache first and let the shared helper refresh the board,
+      // detail, events, my-nominations and notification queries.
+      applyQuestUpdate(queryClient, projectId, updated);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.project(projectId),
+      });
+      onPassed?.(updated);
       onClose();
     },
   });
@@ -229,7 +236,7 @@ export function PassReasonDialog({
 
           {passMutation.isError ? (
             <p role="alert" className="text-xs text-brick">
-              {ko.pass.failed}
+              {partyErrorMessage(passMutation.error, ko.pass.failed)}
             </p>
           ) : null}
         </div>

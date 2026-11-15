@@ -33,15 +33,14 @@ import {
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
 import { isImeComposing } from "../../lib/ime";
-import { STAGE_ICON } from "../../lib/icons";
 import { queryKeys } from "../../lib/queryKeys";
-import AdventurerSprite from "../AdventurerSprite";
 import Icon from "../Icon";
 import RankBadge from "../RankBadge";
 import { Button, TextInput } from "../ui";
+import DungeonView from "./DungeonView";
 import EditableTextSection from "./EditableTextSection";
 import EventTimeline from "./EventTimeline";
-import { STAGE_MARK_CLASSES } from "./stageMark";
+import PartySection from "./PartySection";
 import TagEditor from "./TagEditor";
 
 /** Props for {@link QuestDrawer}. */
@@ -272,35 +271,9 @@ export function QuestDrawer({
 
           {quest ? (
             <>
-              <div
-                data-testid="quest-dungeon-placeholder"
-                style={{ height: "120px" }}
-                className="relative flex w-full shrink-0 items-center justify-center overflow-hidden rounded-sm border-[1.5px] border-line-strong bg-sunken"
-              >
-                <div className="absolute inset-y-3 left-3 flex flex-col items-center justify-center gap-1">
-                  <Icon name={STAGE_ICON[quest.stage]} size={64} />
-                  <span
-                    aria-hidden="true"
-                    data-stage-mark={quest.stage}
-                    className={`h-0.5 w-10 ${STAGE_MARK_CLASSES[quest.stage]}`}
-                  />
-                </div>
-                <div className="flex flex-col items-center gap-0.5 px-16 text-center">
-                  <span className="text-xs font-medium text-muted">
-                    {ko.board.drawer.dungeonView}
-                  </span>
-                  <p className="text-sm font-semibold text-ink">
-                    {ko.board.drawer.dungeonComingSoon}
-                  </p>
-                </div>
-                <div className="absolute right-3 top-3">
-                  <AdventurerSprite
-                    userId={quest.createdBy.id}
-                    displayName={quest.createdBy.displayName}
-                    size="md"
-                  />
-                </div>
-              </div>
+              <DungeonView quest={quest} />
+
+              <PartySection projectId={projectId} quest={quest} />
 
               <div className="space-y-1.5">
                 <label

@@ -479,15 +479,20 @@ describe("BoardPage", () => {
     });
 
     expect(
-      await within(dialog).findByText(ko.board.drawer.dungeonComingSoon),
+      await within(dialog).findByText(ko.board.drawer.dungeonView),
     ).toBeInTheDocument();
     const placeholder = within(dialog).getByTestId(
       "quest-dungeon-placeholder",
     );
     expect(placeholder).toHaveStyle({ height: "120px" });
-    const creatorSprite = placeholder.querySelector('[data-user-id="1"]');
-    expect(creatorSprite).not.toBeNull();
-    expect(creatorSprite).toHaveClass("h-10", "w-10");
+    // QUEST_DETAIL's single floor is checked, so the party sits at 100%.
+    expect(placeholder).toHaveAttribute("data-dungeon-progress", "1");
+    const partySprite = placeholder.querySelector(
+      '[data-dungeon-member="1"] [data-user-id="1"]',
+    );
+    expect(partySprite).not.toBeNull();
+    expect(partySprite).toHaveAttribute("data-state", "attack");
+    expect(partySprite).toHaveClass("h-8", "w-8");
 
     const situation = within(dialog).getByTestId("quest-situation");
     expect(situation.querySelector(".whitespace-pre-wrap")).not.toBeNull();

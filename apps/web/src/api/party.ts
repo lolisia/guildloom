@@ -86,7 +86,7 @@ export function pass(
 /**
  * `DELETE /api/nominations/:nominationId` — withdraw a nomination (204).
  *
- * Only the nominator may cancel; the server answers with no body.
+ * The nominee or the nominator may cancel; the server answers with no body.
  */
 export function cancel(
   nominationId: number,

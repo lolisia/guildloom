@@ -657,7 +657,10 @@ describe("LedgerPage", () => {
       name: ko.board.drawer.title,
     });
     expect(
-      await within(dialog).findByText(ko.board.drawer.dungeonComingSoon),
+      await within(dialog).findByText(ko.board.drawer.dungeonView),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByTestId("quest-dungeon-placeholder"),
     ).toBeInTheDocument();
   });
 });
