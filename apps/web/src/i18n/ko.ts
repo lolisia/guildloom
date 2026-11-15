@@ -7,10 +7,76 @@
  * labels, the drawer labels, the ledger column labels and the relative-time
  * helpers are part of the T06 interface and must not be renamed.
  */
+import type { Notification } from "@guildloom/shared";
 
 /** Confirm prompt shown before bulk-creating quests from pasted titles. */
 const bulkConfirm = (count: number): string =>
   `${count}건을 의뢰로 등록할까요?`;
+
+/** Quest wording fallback when a notification carries no title. */
+const NOTIFICATION_QUEST_FALLBACK = "의뢰";
+
+/** Actor wording fallback when a system notification has no actor. */
+const NOTIFICATION_UNKNOWN_ACTOR = "어떤 모험가";
+
+/** `#12 '로그인 버그'` style quest label used by notification copy. */
+const notificationQuestLabel = (
+  questNumber: number | null,
+  questTitle: string | null,
+): string => {
+  if (questTitle === null) {
+    return NOTIFICATION_QUEST_FALLBACK;
+  }
+  return questNumber === null
+    ? `'${questTitle}'`
+    : `#${questNumber} '${questTitle}'`;
+};
+
+/**
+ * One Korean sentence per notification type.
+ *
+ * `actor` is the adventurer who triggered the notification (a system event
+ * falls back to {@link NOTIFICATION_UNKNOWN_ACTOR}) and `quest` is the label
+ * produced by {@link notificationQuestLabel}.
+ */
+const notificationTemplates = {
+  nominated: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}에 지목했습니다.`,
+  relayed: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}를 토스했습니다.`,
+  reinforce: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}에 증원을 요청했습니다.`,
+  boss_engaged: (quest: string): string =>
+    `${quest}의 보스전이 시작되었습니다.`,
+  retry_requested: (actor: string, quest: string): string =>
+    `${actor}님이 ${quest}의 재도전을 요청했습니다.`,
+  quest_cleared: (quest: string): string => `${quest}를 클리어했습니다.`,
+};
+
+/** Render a notification row (and its toast) as one Korean sentence. */
+function formatNotification(notification: Notification): string {
+  const quest = notificationQuestLabel(
+    notification.questNumber,
+    notification.questTitle,
+  );
+  const actor =
+    notification.actor?.displayName ?? NOTIFICATION_UNKNOWN_ACTOR;
+
+  switch (notification.type) {
+    case "nominated":
+      return notificationTemplates.nominated(actor, quest);
+    case "relayed":
+      return notificationTemplates.relayed(actor, quest);
+    case "reinforce":
+      return notificationTemplates.reinforce(actor, quest);
+    case "boss_engaged":
+      return notificationTemplates.boss_engaged(quest);
+    case "retry_requested":
+      return notificationTemplates.retry_requested(actor, quest);
+    case "quest_cleared":
+      return notificationTemplates.quest_cleared(quest);
+  }
+}
 
 /** Relative-time labels shared by the ledger and the quest event history. */
 export const timeStrings = {
@@ -334,6 +400,42 @@ export const ko = {
     leaveGuild: "길드 떠나기",
     leaveConfirm: "정말 길드를 떠날까요?",
     leaveFailed: "길드를 떠나지 못했습니다.",
+  },
+  notifications: {
+    label: "알림",
+    title: "알림",
+    loading: "알림을 불러오는 중…",
+    loadFailed: "알림을 불러오지 못했습니다.",
+    empty: "새 알림이 없습니다.",
+    markAllRead: "모두 읽음",
+    markAllReadFailed: "알림을 읽음으로 표시하지 못했습니다.",
+    accept: "수락",
+    accepting: "수락 중…",
+    acceptFailed: "지목을 수락하지 못했습니다.",
+    pass: "패스",
+    unknownActor: NOTIFICATION_UNKNOWN_ACTOR,
+    questFallback: NOTIFICATION_QUEST_FALLBACK,
+    questLabel: notificationQuestLabel,
+    templates: notificationTemplates,
+    format: formatNotification,
+  },
+  pass: {
+    title: "지목 넘기기",
+    description: "이번 지목을 넘기고, 필요하면 다른 모험가에게 토스하세요.",
+    reasonLabel: "넘기는 이유",
+    reasonPlaceholder: "이유를 직접 입력 (최대 100자)",
+    presetsLabel: "빠른 선택",
+    tossLabel: "토스할 모험가",
+    tossNone: "토스하지 않음",
+    membersLoadFailed: "모험가 목록을 불러오지 못했습니다.",
+    submit: "패스하기",
+    submitting: "넘기는 중…",
+    failed: "지목을 넘기지 못했습니다.",
+  },
+  levelUp: {
+    title: "LEVEL UP!",
+    level: (from: number, to: number): string => `Lv.${from} → Lv.${to}`,
+    hint: "새로운 레벨에 도달했습니다.",
   },
   theme: {
     label: "테마",

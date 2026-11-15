@@ -13,6 +13,23 @@
 import type { MeResponse, ProjectSummary, UserProfile } from "@guildloom/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * The authenticated shell now opens the realtime Socket.IO connection.
+ * These routing/render tests stay offline with an inert client;
+ * `realtime.test.tsx` installs its own controllable fake instead.
+ */
+vi.mock("socket.io-client", () => {
+  const socket = {
+    connected: false,
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+    disconnect: vi.fn(),
+  };
+
+  return { io: vi.fn(() => socket) };
+});
+
 // jsdom 29 ships without type declarations and `@types/jsdom` is not part of
 // the M1 dependency set, so import it through an untyped expression (the
 // runtime specifier is still the literal "jsdom").
@@ -76,7 +93,7 @@ surface.self = surface;
 surface.top = surface;
 surface.parent = surface;
 
-const { cleanup, fireEvent, render, waitFor, within } = await import(
+const { act, cleanup, fireEvent, render, waitFor, within } = await import(
   "@testing-library/react"
 );
 const userEvent = (await import("@testing-library/user-event")).default;
@@ -742,6 +759,31 @@ describe("TabBar", () => {
           String(url) === "/api/auth/logout" && init?.method === "POST",
       ),
     ).toBe(true);
+  });
+
+  it("drops private notification and nomination caches on logout", async () => {
+    const view = renderApp("/g/1", { me: HERO });
+    const { queryClient, user } = view;
+
+    await view.findByRole("button", { name: ko.tabs.logout });
+
+    // A query cache lives for the whole app session (the test client keeps
+    // data forever), so seed what the bell and inline actions would cache.
+    act(() => {
+      queryClient.setQueryData(queryKeys.notifications, {
+        items: [],
+        unreadCount: 3,
+      });
+      queryClient.setQueryData(queryKeys.myNominations, []);
+      queryClient.setQueryData(queryKeys.projects, PROJECTS);
+    });
+
+    await user.click(view.getByRole("button", { name: ko.tabs.logout }));
+    await expectPath(view, "/login");
+
+    expect(queryClient.getQueryData(queryKeys.notifications)).toBeUndefined();
+    expect(queryClient.getQueryData(queryKeys.myNominations)).toBeUndefined();
+    expect(queryClient.getQueryData(queryKeys.projects)).toBeUndefined();
   });
 });
 

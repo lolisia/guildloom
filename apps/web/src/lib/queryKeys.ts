@@ -26,4 +26,8 @@ export const queryKeys = {
   tags: (projectId: number, q = "") => ["tags", projectId, q] as const,
   /** `GET /api/projects/:projectId/invites` */
   invites: (projectId: number) => ["invites", projectId] as const,
+  /** `GET /api/notifications` (newest first, includes the unread count). */
+  notifications: ["notifications"] as const,
+  /** `GET /api/me/nominations` (the adventurer's pending nominations). */
+  myNominations: ["myNominations"] as const,
 };

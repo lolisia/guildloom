@@ -23,6 +23,7 @@ import { isImeComposing } from "../lib/ime";
 import { queryKeys } from "../lib/queryKeys";
 import AdventurerSprite from "./AdventurerSprite";
 import Icon from "./Icon";
+import NotificationsMenu from "./NotificationsMenu";
 import ThemeMenu from "./ThemeMenu";
 import { Button, TextInput } from "./ui";
 
@@ -87,9 +88,17 @@ export function TabBar() {
   const logoutMutation = useMutation({
     mutationFn: () => logout(),
     onSettled: () => {
+      // The QueryClient outlives the session (30s staleTime / 5min gcTime),
+      // so drop every guild query — notifications and pending nominations
+      // included — before another account can sign in on this browser. Only
+      // the public setup status and the explicit null `me` survive.
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] !== queryKeys.setupStatus[0] &&
+          query.queryKey[0] !== queryKeys.me[0],
+      });
       // Drop the session view immediately; the gate then renders /login.
       queryClient.setQueryData<MeResponse | null>(queryKeys.me, null);
-      queryClient.removeQueries({ queryKey: queryKeys.projects });
       navigate("/login", { replace: true });
     },
   });
@@ -281,6 +290,8 @@ export function TabBar() {
               </div>
             </div>
           ) : null}
+
+          {user ? <NotificationsMenu /> : null}
 
           <ThemeMenu />
 
