@@ -327,7 +327,7 @@ export default function InvitePage() {
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-xs text-muted">{ko.invite.code}</dt>
             <dd>
-              <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-xs text-teal">
+              <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-[12px] text-teal">
                 {inviteCode}
               </code>
             </dd>

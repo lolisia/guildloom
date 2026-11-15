@@ -167,7 +167,7 @@ export function InviteSection({ projectId }: InviteSectionProps) {
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Icon name="invite" size={32} />
-                      <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-xs text-ink">
+                      <code className="rounded-sm bg-sunken px-1.5 py-0.5 font-pixel text-[12px] text-ink">
                         {invite.code}
                       </code>
                       <span

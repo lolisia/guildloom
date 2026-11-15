@@ -30,6 +30,9 @@ ran=0
 if [ -f package.json ]; then
   echo "verify: node workspaces"
   npm ci
+  # Design-rule checker: its unit tests, then the whole-repo lint.
+  node --test scripts/check-rules.test.mjs
+  npm run lint
   npm run typecheck
   npm test
   npm run build

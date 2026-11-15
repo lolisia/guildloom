@@ -585,9 +585,9 @@ describe("LedgerPage", () => {
       .querySelector('tbody tr[data-quest-id="1"]')!
       .querySelectorAll<HTMLTableCellElement>("td");
     expect(alphaCells[3]).toHaveTextContent("하늘");
-    expect(alphaCells[4]).toHaveClass("font-pixel", "text-xs", "text-gold");
+    expect(alphaCells[4]).toHaveClass("font-pixel", "text-[12px]", "text-gold");
     expect(alphaCells[4]).toHaveTextContent("80");
-    expect(alphaCells[5]).toHaveClass("font-pixel", "text-xs");
+    expect(alphaCells[5]).toHaveClass("font-pixel", "text-[12px]");
     expect(alphaCells[5]).toHaveTextContent("1/4");
 
     const betaCells = container

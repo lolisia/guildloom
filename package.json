@@ -12,6 +12,7 @@
     "apps/*"
   ],
   "scripts": {
+    "lint": "node scripts/check-rules.mjs",
     "pretypecheck": "npm run build -w @guildloom/shared",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "pretest": "npm run build -w @guildloom/shared",

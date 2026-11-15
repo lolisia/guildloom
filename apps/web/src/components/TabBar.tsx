@@ -274,7 +274,7 @@ export function TabBar() {
                   <span className="max-w-32 truncate text-sm font-medium text-ink">
                     {user.displayName}
                   </span>
-                  <span className="font-pixel text-xs text-gold">
+                  <span className="font-pixel text-[12px] text-gold">
                     {ko.tabs.level(level)}
                   </span>
                 </div>

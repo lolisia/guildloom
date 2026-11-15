@@ -64,11 +64,11 @@ export function MemberList({ members }: MemberListProps) {
                       : ko.settings.roleMember}
                   </span>
                 </div>
-                <p className="mt-0.5 font-pixel text-xs text-muted">
+                <p className="mt-0.5 font-pixel text-[12px] text-muted">
                   {ko.tabs.xp(progress.current, progress.next)}
                 </p>
               </div>
-              <span className="font-pixel text-xs font-bold text-gold">
+              <span className="font-pixel text-[12px] font-bold text-gold">
                 {ko.tabs.level(member.level)}
               </span>
             </li>
