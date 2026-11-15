@@ -98,6 +98,7 @@ const QUESTS: QuestSummary[] = [
     number: 1,
     title: "보드 첫 의뢰",
     stage: "board",
+    kind: "fix",
     rank: "B",
     orderKey: "a0",
     tags: ["긴급", "버그"],
@@ -114,6 +115,7 @@ const QUESTS: QuestSummary[] = [
     number: 2,
     title: "던전 의뢰",
     stage: "dungeon",
+    kind: "feature",
     rank: null,
     orderKey: "a1",
     tags: [],
@@ -130,6 +132,7 @@ const QUESTS: QuestSummary[] = [
     number: 3,
     title: "보스 의뢰",
     stage: "boss",
+    kind: "fix",
     rank: "S",
     orderKey: "a2",
     tags: ["보스"],
@@ -146,6 +149,7 @@ const QUESTS: QuestSummary[] = [
     number: 4,
     title: "클리어 의뢰",
     stage: "cleared",
+    kind: "fix",
     rank: null,
     orderKey: "a3",
     tags: [],
@@ -163,7 +167,7 @@ const QUEST_DETAIL: Quest = {
   ...QUESTS[0]!,
   projectId: 1,
   situation: "첫 줄\n둘째 줄 https://example.com",
-  direction: "다음 단계로 진행합니다.",
+  direction: "- [x] 1층: 재현",
   archiveReason: null,
   party: [
     {
@@ -175,15 +179,8 @@ const QUEST_DETAIL: Quest = {
     },
   ],
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 재현",
-      orderKey: "a0",
-      doneAt: NOW - 3_600_000,
-      doneBy: { id: 1, displayName: "김모험" },
-    },
-  ],
+  floors: { done: 1, total: 1 },
+  refs: [],
   firstClaimedAt: NOW - 3 * 86_400_000,
 };
 
@@ -484,15 +481,15 @@ describe("BoardPage", () => {
     const placeholder = within(dialog).getByTestId(
       "quest-dungeon-placeholder",
     );
-    expect(placeholder).toHaveStyle({ height: "120px" });
-    // QUEST_DETAIL's single floor is checked, so the party sits at 100%.
+    expect(placeholder).toHaveStyle({ height: "88px" });
+    // QUEST_DETAIL's single checklist item is checked, so the party sits at 100%.
     expect(placeholder).toHaveAttribute("data-dungeon-progress", "1");
     const partySprite = placeholder.querySelector(
       '[data-dungeon-member="1"] [data-user-id="1"]',
     );
     expect(partySprite).not.toBeNull();
     expect(partySprite).toHaveAttribute("data-state", "attack");
-    expect(partySprite).toHaveClass("h-8", "w-8");
+    expect(partySprite).toHaveClass("h-10", "w-10");
 
     const situation = within(dialog).getByTestId("quest-situation");
     expect(situation.querySelector(".whitespace-pre-wrap")).not.toBeNull();
@@ -504,10 +501,22 @@ describe("BoardPage", () => {
     expect(
       within(dialog).getByText(formatKoreanDateTime(EVENTS[0]!.createdAt)),
     ).toBeInTheDocument();
-    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(2);
+    // Collapsed history lists only key events (quest_posted); expanding shows
+    // the non-key quest_moved row too.
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(1);
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: ko.board.drawer.showAllHistory(EVENTS.length),
+      }),
+    );
+    await waitFor(() =>
+      expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(
+        EVENTS.length,
+      ),
+    );
   });
 
-  it("saves title, rank, tags and long text through PATCH", async () => {
+  it("saves the kind, title, tags and long text through PATCH", async () => {
     const patches: unknown[] = [];
     const fetchMock = stubFetch((url, init) => {
       const method = (init.method ?? "GET").toUpperCase();
@@ -524,6 +533,11 @@ describe("BoardPage", () => {
       name: ko.board.drawer.title,
     });
 
+    const feature = await within(dialog).findByRole("button", {
+      name: ko.quest.kinds.feature,
+    });
+    expect(feature).toHaveAttribute("aria-pressed", "false");
+
     const titleInput = await within(dialog).findByRole("textbox", {
       name: ko.quest.titleLabel,
     });
@@ -532,12 +546,6 @@ describe("BoardPage", () => {
     await waitFor(() =>
       expect(patches).toContainEqual({ title: "수정된 제목" }),
     );
-
-    await user.selectOptions(
-      within(dialog).getByRole("combobox", { name: ko.quest.rank }),
-      "A",
-    );
-    await waitFor(() => expect(patches).toContainEqual({ rank: "A" }));
 
     const tagInput = within(dialog).getByRole("textbox", {
       name: ko.quest.tagAdd,
@@ -585,6 +593,17 @@ describe("BoardPage", () => {
     await waitFor(() =>
       expect(patches).toContainEqual({ situation: "새 상황\n둘째 줄" }),
     );
+
+    await user.click(feature);
+    await waitFor(() => expect(patches).toContainEqual({ kind: "feature" }));
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("button", { name: ko.quest.kinds.feature }),
+      ).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: `${ko.quest.kindFields.feature.situation} ${ko.common.edit}` }),
+    ).toBeInTheDocument();
   });
 
   it("archives the quest after confirmation and removes it from the board", async () => {

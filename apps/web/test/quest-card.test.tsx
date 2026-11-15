@@ -58,6 +58,7 @@ const BASE_QUEST: QuestSummary = {
   number: 7,
   title: "보드 첫 의뢰",
   stage: "board",
+  kind: "fix",
   rank: "B",
   orderKey: "a0",
   tags: ["긴급"],

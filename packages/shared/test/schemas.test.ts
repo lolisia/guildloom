@@ -6,7 +6,6 @@ import {
   RANKS,
   STAGES,
   XP_REASONS,
-  addFloorsRequestSchema,
   appendChecklistRequestSchema,
   bulkCreateQuestsRequestSchema,
   clearPreviewResponseSchema,
@@ -14,12 +13,10 @@ import {
   createQuestRefRequestSchema,
   createQuestRequestSchema,
   displayNameSchema,
-  floorListResponseSchema,
   guildNameSchema,
   leavePartyRequestSchema,
   loginIdSchema,
   memberStatusRequestSchema,
-  moveFloorRequestSchema,
   myNominationSchema,
   myNominationsResponseSchema,
   nominateRequestSchema,
@@ -43,11 +40,10 @@ import {
   retryQuestRequestSchema,
   stageSchema,
   toggleChecklistRequestSchema,
-  updateFloorRequestSchema,
   updateQuestRequestSchema,
 } from "../src/index.js";
 
-/** A complete quest detail payload, including the M2 party/floor shapes. */
+/** A complete quest detail payload, including the M2 party/detail shapes. */
 const questDetail = {
   id: 1,
   number: 12,
@@ -62,7 +58,7 @@ const questDetail = {
   pendingNominations: 1,
   projectId: 2,
   situation: "세션 만료 후 빈 화면",
-  direction: "세션 갱신 처리",
+  direction: "- [x] 로그인 재현\n- [ ] 세션 갱신",
   archiveReason: null,
   party: [
     {
@@ -92,22 +88,7 @@ const questDetail = {
       createdAt: 1_700_000_000_200,
     },
   ],
-  floors: [
-    {
-      id: 5,
-      title: "1층: 로그인 재현",
-      orderKey: "a0",
-      doneAt: 1_700_000_000_300,
-      doneBy: { id: 7, displayName: "김철수" },
-    },
-    {
-      id: 6,
-      title: "2층: 세션 갱신",
-      orderKey: "a1",
-      doneAt: null,
-      doneBy: null,
-    },
-  ],
+  floors: { done: 1, total: 2 },
   bounty: {
     base: 40,
     multiplier: 1.2,
@@ -359,17 +340,45 @@ describe("questSummarySchema", () => {
 });
 
 describe("questSchema", () => {
-  it("overrides the summary party and floors with detail shapes", () => {
+  it("overrides the summary party with the detail shape", () => {
     const parsed = questSchema.parse(questDetail);
 
     expect(parsed).toEqual({ ...questDetail, kind: "fix", refs: [] });
     // PartyMember carries the full user ref, not the summary's flat fields.
     expect(parsed.party[0]?.user.displayName).toBe("김철수");
     expect(parsed.party[1]?.retreatReason).toBe("담당자가 아님");
-    expect(parsed.floors[0]?.doneBy?.id).toBe(7);
-    expect(parsed.floors[1]?.doneAt).toBeNull();
+    expect(parsed.floors).toEqual({ done: 1, total: 2 });
     expect(parsed.nominations[0]?.nominee.id).toBe(9);
     expect(parsed.firstClaimedAt).toBe(1_700_000_000_000);
+  });
+
+  /**
+   * The server's party routes still answer through this schema with the
+   * retired floor rows (`loadQuestView` returns an empty array), so the
+   * deprecated branch stays parseable until that wrapper is removed.
+   */
+  it("still accepts the deprecated floor rows the party routes emit", () => {
+    expect(questSchema.parse({ ...questDetail, floors: [] }).floors).toEqual(
+      [],
+    );
+
+    const withRows = questSchema.parse({
+      ...questDetail,
+      floors: [
+        {
+          id: 5,
+          title: "1층: 로그인 재현",
+          orderKey: "a0",
+          doneAt: null,
+          doneBy: null,
+        },
+      ],
+    });
+    expect(withRows.floors).toHaveLength(1);
+
+    expect(
+      questSchema.safeParse({ ...questDetail, floors: [{ id: 5 }] }).success,
+    ).toBe(false);
   });
 
   it("defaults kind and refs while accepting explicit values", () => {
@@ -687,45 +696,6 @@ describe("party request schemas", () => {
       retryQuestRequestSchema.safeParse({ comment: "가".repeat(501) }).success,
     ).toBe(false);
   });
-
-  it("caps floor batches at 50 titles", () => {
-    expect(addFloorsRequestSchema.safeParse({ titles: ["1층"] }).success).toBe(
-      true,
-    );
-    expect(
-      addFloorsRequestSchema.safeParse({
-        titles: Array.from({ length: 50 }, (_, index) => `${index}층`),
-      }).success,
-    ).toBe(true);
-    expect(
-      addFloorsRequestSchema.safeParse({
-        titles: Array.from({ length: 51 }, (_, index) => `${index}층`),
-      }).success,
-    ).toBe(false);
-  });
-
-  it("limits floor titles to 200 characters and allows emptying a patch", () => {
-    expect(
-      updateFloorRequestSchema.safeParse({ title: "가".repeat(200) }).success,
-    ).toBe(true);
-    expect(
-      updateFloorRequestSchema.safeParse({ title: "가".repeat(201) }).success,
-    ).toBe(false);
-    expect(updateFloorRequestSchema.safeParse({ done: true }).success).toBe(
-      true,
-    );
-    expect(updateFloorRequestSchema.safeParse({}).success).toBe(true);
-  });
-
-  it("accepts before/after ids when moving a floor", () => {
-    expect(moveFloorRequestSchema.safeParse({}).success).toBe(true);
-    expect(
-      moveFloorRequestSchema.safeParse({ beforeId: 3, afterId: 4 }).success,
-    ).toBe(true);
-    expect(
-      moveFloorRequestSchema.safeParse({ beforeId: "3" }).success,
-    ).toBe(false);
-  });
 });
 
 describe("readNotificationsRequestSchema", () => {
@@ -809,14 +779,7 @@ describe("action response schemas", () => {
     ).toBe(false);
   });
 
-  it("returns floor arrays and my pending nominations", () => {
-    expect(floorListResponseSchema.parse(questDetail.floors)).toEqual(
-      questDetail.floors,
-    );
-    expect(floorListResponseSchema.safeParse({ floors: [] }).success).toBe(
-      false,
-    );
-
+  it("returns my pending nominations", () => {
     const mine = {
       ...questDetail.nominations[0]!,
       questNumber: 12,

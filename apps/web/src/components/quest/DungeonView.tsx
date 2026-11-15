@@ -1,24 +1,24 @@
 /**
- * The 120px dungeon view at the top of the quest drawer.
+ * The 88px dungeon view at the top of the quest drawer.
  *
  * The party's horizontal position is the quest's clear progress: the checked
- * floor ratio when floors exist, otherwise a per-stage fallback (board 0,
- * dungeon 0.5, boss 0.9, cleared 1). Active members are drawn as 32px
- * {@link AdventurerSprite}s on the dungeon lane and animate according to their
- * clear status (`fighting` attacks, `done` celebrates, `joined` idles). A boss
- * stage also pins the pack's boss icon and its 보스 label to the right end of
- * the lane.
+ * checklist ratio parsed from `direction` when the checklist has items,
+ * otherwise a per-stage fallback (board 0, dungeon 0.5, boss 0.9, cleared 1).
+ * Active members are drawn as {@link AdventurerSprite}s on the dungeon lane
+ * and animate according to their clear status (`fighting` attacks, `done`
+ * celebrates, `joined` idles). A boss stage also pins the pack's boss icon and
+ * its 보스 label to the right end of the lane.
  *
  * The outer container keeps the `quest-dungeon-placeholder` test id from M1 so
  * the board, ledger and drawer suites keep a stable handle on this panel.
  */
-import type {
-  AdventurerState,
-  Floor,
-  MemberStatus,
-  PartyMember,
-  Quest,
-  Stage,
+import {
+  parseChecklist,
+  type AdventurerState,
+  type MemberStatus,
+  type PartyMember,
+  type Quest,
+  type Stage,
 } from "@guildloom/shared";
 
 import { ko } from "../../i18n/ko";
@@ -27,7 +27,7 @@ import AdventurerSprite from "../AdventurerSprite";
 import Icon from "../Icon";
 import { STAGE_MARK_CLASSES } from "./stageMark";
 
-/** Progress shown when a quest has no floors yet. */
+/** Progress shown when the checklist has no items yet. */
 export const STAGE_PROGRESS_FALLBACK: Record<Stage, number> = {
   rumor: 0,
   board: 0,
@@ -52,14 +52,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** Checked-floor ratio, or the stage fallback when the quest has no floors. */
-export function dungeonProgress(
-  stage: Stage,
-  floors: readonly Floor[],
-): number {
-  const total = floors.length;
+/** Checked-checklist ratio, or the stage fallback when it has no items. */
+export function dungeonProgress(stage: Stage, direction: string): number {
+  const { done, total } = parseChecklist(direction);
   if (total > 0) {
-    const done = floors.filter((floor) => floor.doneAt !== null).length;
     return clamp(done / total, 0, 1);
   }
   return STAGE_PROGRESS_FALLBACK[stage];
@@ -69,7 +65,7 @@ export function dungeonProgress(
  * Horizontal positions (0–1) for the active party at `progress`.
  *
  * The group is centred on the progress marker and spread just enough that the
- * 32px sprites do not stack, while staying inside the lane at both ends.
+ * sprites do not stack, while staying inside the lane at both ends.
  */
 export function dungeonPartyPositions(
   progress: number,
@@ -99,9 +95,8 @@ export interface DungeonViewProps {
 
 /** Sunken dungeon lane with the stage marker, progress and party sprites. */
 export function DungeonView({ quest }: DungeonViewProps) {
-  const progress = dungeonProgress(quest.stage, quest.floors);
-  const done = quest.floors.filter((floor) => floor.doneAt !== null).length;
-  const total = quest.floors.length;
+  const progress = dungeonProgress(quest.stage, quest.direction);
+  const { done, total } = parseChecklist(quest.direction);
   const activeMembers: PartyMember[] = quest.party.filter(
     (member) => member.status !== "retreated",
   );
@@ -116,7 +111,7 @@ export function DungeonView({ quest }: DungeonViewProps) {
       data-testid="quest-dungeon-placeholder"
       data-dungeon-stage={quest.stage}
       data-dungeon-progress={progress}
-      style={{ height: "120px" }}
+      style={{ height: "88px" }}
       className="relative w-full shrink-0 overflow-hidden rounded-sm border-[1.5px] border-line-strong bg-sunken"
     >
       <div className="absolute left-2 top-0 flex items-center gap-2">
@@ -185,7 +180,7 @@ export function DungeonView({ quest }: DungeonViewProps) {
                     userId={member.user.id}
                     displayName={member.user.displayName}
                     state={state}
-                    size="sm"
+                    size="md"
                   />
                 </li>
               );

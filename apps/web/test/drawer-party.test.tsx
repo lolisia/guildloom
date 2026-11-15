@@ -101,6 +101,7 @@ function baseQuest(overrides: Partial<Quest> = {}): Quest {
     number: 42,
     title: "파티 의뢰",
     stage: "board",
+    kind: "fix",
     rank: "C",
     orderKey: "a0",
     tags: [],
@@ -114,7 +115,8 @@ function baseQuest(overrides: Partial<Quest> = {}): Quest {
     direction: "",
     archiveReason: null,
     nominations: [],
-    floors: [],
+    floors: { done: 0, total: 0 },
+    refs: [],
     firstClaimedAt: NOW,
     ...overrides,
   };
@@ -388,27 +390,11 @@ afterEach(() => {
 });
 
 describe("QuestDrawer dungeon view", () => {
-  it("positions the active party by floor progress and maps status to sprite state", async () => {
+  it("positions the active party by checklist progress and maps status to sprite state", async () => {
     const quest = baseQuest({
       stage: "dungeon",
-      floors: [
-        {
-          id: 1,
-          title: "1층",
-          orderKey: "a0",
-          doneAt: NOW,
-          doneBy: { id: 1, displayName: "김모험" },
-        },
-        { id: 2, title: "2층", orderKey: "a1", doneAt: null, doneBy: null },
-        {
-          id: 3,
-          title: "3층",
-          orderKey: "a2",
-          doneAt: NOW,
-          doneBy: { id: 1, displayName: "김모험" },
-        },
-        { id: 4, title: "4층", orderKey: "a3", doneAt: null, doneBy: null },
-      ],
+      direction: "- [x] 1층\n- [ ] 2층\n- [x] 3층\n- [ ] 4층",
+      floors: { done: 2, total: 4 },
       party: [
         member(2, "이모험", "fighting", "leader"),
         member(3, "박모험", "done"),
@@ -462,7 +448,7 @@ describe("QuestDrawer dungeon view", () => {
     expect(progress).toHaveAttribute("aria-valuemax", "4");
   });
 
-  it("falls back to the stage ratio when the quest has no floors", async () => {
+  it("falls back to the stage ratio when the checklist is empty", async () => {
     const cases = [
       { stage: "board" as const, ratio: "0" },
       { stage: "dungeon" as const, ratio: "0.5" },
@@ -533,10 +519,10 @@ describe("QuestDrawer party section", () => {
     expect(
       within(section).getByText(MEMBER_STATUS_LABELS.fighting),
     ).toBeInTheDocument();
+    // F1 dropped the per-status icon; the chip is text only.
     expect(
-      section.querySelector('[data-party-status-chip="fighting"] img')
-        ?.getAttribute("src"),
-    ).toBe("/assets/icons/jrpg-v1/32/fighting.png");
+      section.querySelector('[data-party-status-chip="fighting"] img'),
+    ).toBeNull();
     expect(
       section.querySelector('[data-party-user-id="2"]'),
     ).toHaveAttribute("data-party-role", "leader");

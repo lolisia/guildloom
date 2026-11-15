@@ -6,17 +6,21 @@
  * `ListQuestsQuery` filters as the server (`stage` is a comma-separated list).
  */
 import type {
+  AppendChecklistRequest,
   ArchiveQuestRequest,
   BulkCreateQuestsRequest,
   ClearQuestResponse,
+  CreateQuestRefRequest,
   CreateQuestRequest,
   ListQuestsQuery,
   MoveQuestRequest,
   Quest,
   QuestEventsResponse,
   QuestListResponse,
+  QuestRef,
   RetryQuestRequest,
   TagListResponse,
+  ToggleChecklistRequest,
   UpdateQuestRequest,
 } from "@guildloom/shared";
 
@@ -101,7 +105,7 @@ export function fetchQuest(
   return apiFetch<Quest>(`/quests/${questId}`, { signal });
 }
 
-/** `PATCH /api/quests/:questId` — edit title, text, tags or rank. */
+/** `PATCH /api/quests/:questId` — edit title, text, tags, rank or kind. */
 export function updateQuest(
   questId: number,
   body: UpdateQuestRequest,
@@ -109,6 +113,67 @@ export function updateQuest(
 ): Promise<Quest> {
   return apiFetch<Quest>(`/quests/${questId}`, {
     method: "PATCH",
+    body,
+    signal,
+  });
+}
+
+/**
+ * `POST /api/quests/:questId/refs` — attach a reference document.
+ *
+ * The server answers with the created row (201), which the drawer appends to
+ * the cached detail.
+ */
+export function createQuestRef(
+  questId: number,
+  body: CreateQuestRefRequest,
+  signal?: AbortSignal,
+): Promise<QuestRef> {
+  return apiFetch<QuestRef>(`/quests/${questId}/refs`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+/** `DELETE /api/refs/:refId` — remove a reference document. */
+export function deleteQuestRef(
+  refId: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiFetch<void>(`/refs/${refId}`, {
+    method: "DELETE",
+    signal,
+  });
+}
+
+/**
+ * `POST /api/quests/:questId/checklist/:index` — check/uncheck one item.
+ *
+ * `text` is the checklist text the caller saw; the server answers a
+ * `CHECKLIST_CONFLICT` when it no longer matches.
+ */
+export function toggleChecklist(
+  questId: number,
+  index: number,
+  body: ToggleChecklistRequest,
+  signal?: AbortSignal,
+): Promise<Quest> {
+  return apiFetch<Quest>(`/quests/${questId}/checklist/${index}`, {
+    method: "POST",
+    body,
+    signal,
+  });
+}
+
+/** `POST /api/quests/:questId/checklist` — append one item per title. */
+export function appendChecklist(
+  questId: number,
+  body: AppendChecklistRequest,
+  signal?: AbortSignal,
+): Promise<Quest> {
+  return apiFetch<Quest>(`/quests/${questId}/checklist`, {
+    method: "POST",
     body,
     signal,
   });

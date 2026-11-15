@@ -3,11 +3,13 @@
  * `?quest=<id>` URL query.
  *
  * The drawer owns the detail and event queries for one quest, inline edits
- * (title, rank, tags, situation, direction), the dungeon floor checklist, the
- * boss clear/retry actions and the archive flow. Scalar mutations update the
- * quest cache from the server response and invalidate the board and ledger
- * lists so cards stay in sync. Tags go through a dedicated optimistic mutation
- * so rapid chip edits accumulate locally instead of racing stale server state.
+ * (title, kind, tags, situation, direction), the direction checklist, reference
+ * documents, the boss clear/retry actions and the archive flow. Scalar
+ * mutations update the quest cache from the server response and invalidate the
+ * board and ledger lists so cards stay in sync. Tags go through a dedicated
+ * optimistic mutation so rapid chip edits accumulate locally instead of racing
+ * stale server state. Checklist toggles are optimistic too and fall back to a
+ * fresh detail fetch when the server reports `CHECKLIST_CONFLICT`.
  *
  * Declaring a clear celebrates the caller's own reward for ~2s and opens the
  * LEVEL UP modal when the settlement reports a level transition for them.
@@ -17,10 +19,11 @@
  * 1.5px line-strong rule.
  */
 import {
-  RANKS,
+  QUEST_KINDS,
+  setChecklistItem,
   type Quest,
+  type QuestKind,
   type QuestSummary,
-  type Rank,
   type UpdateQuestRequest,
 } from "@guildloom/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,27 +32,30 @@ import type { MouseEvent } from "react";
 import { createPortal } from "react-dom";
 
 import { fetchMe } from "../../api/auth";
+import { ApiClientError } from "../../api/client";
 import {
+  appendChecklist,
   archiveQuest,
   clearQuest,
   fetchEvents,
   fetchQuest,
+  toggleChecklist,
   updateQuest,
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
 import { isImeComposing } from "../../lib/ime";
 import { useLevelUpStore } from "../../lib/levelUp";
 import { queryKeys } from "../../lib/queryKeys";
-import Icon from "../Icon";
-import RankBadge from "../RankBadge";
+import { pushToast } from "../../lib/toast";
 import { Button, TextInput } from "../ui";
 import BossBanner from "./BossBanner";
+import { ChecklistAddField, ChecklistText } from "./ChecklistText";
 import DungeonView from "./DungeonView";
 import EditableTextSection from "./EditableTextSection";
 import EventTimeline from "./EventTimeline";
 import PartySection from "./PartySection";
 import { invalidatePartyQueries } from "./partyCache";
-import QuestFloors from "./QuestFloors";
+import QuestRefs from "./QuestRefs";
 import TagEditor from "./TagEditor";
 
 /** How long the 던전 클리어! celebration stays on screen. */
@@ -65,6 +71,18 @@ export interface QuestDrawerProps {
 
 /** Snapshot needed to roll an optimistic tag edit back on failure. */
 interface TagMutationContext {
+  previous: Quest | undefined;
+}
+
+/** Variables of one optimistic checklist toggle. */
+interface ChecklistToggleVariables {
+  index: number;
+  text: string;
+  done: boolean;
+}
+
+/** Snapshot needed to roll an optimistic checklist toggle back on failure. */
+interface ChecklistToggleContext {
   previous: Quest | undefined;
 }
 
@@ -203,13 +221,93 @@ export function QuestDrawer({
     },
   });
 
+  /**
+   * Checklist toggles are optimistic: the cached direction flips immediately
+   * with the shared `setChecklistItem` helper, then the server detail replaces
+   * it. A `CHECKLIST_CONFLICT` means somebody edited the list first; refetch
+   * the quest and tell the caller instead of guessing which row is right.
+   */
+  const toggleMutation = useMutation<
+    Quest,
+    Error,
+    ChecklistToggleVariables,
+    ChecklistToggleContext
+  >({
+    mutationFn: ({ index, text, done }) =>
+      toggleChecklist(questId, index, { done, text }),
+    onMutate: async ({ index, done }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.quest(questId) });
+      const previous = queryClient.getQueryData<Quest>(
+        queryKeys.quest(questId),
+      );
+      if (previous) {
+        try {
+          queryClient.setQueryData<Quest>(queryKeys.quest(questId), {
+            ...previous,
+            direction: setChecklistItem(previous.direction, index, done),
+          });
+        } catch {
+          // The item disappeared between render and click; the refetch below
+          // will bring the current list back.
+        }
+      }
+      return { previous };
+    },
+    onError: async (error, _variables, context) => {
+      if (
+        error instanceof ApiClientError &&
+        error.code === "CHECKLIST_CONFLICT"
+      ) {
+        pushToast(ko.board.drawer.checklist.conflict);
+        await queryClient.fetchQuery({
+          queryKey: queryKeys.quest(questId),
+          queryFn: ({ signal }) => fetchQuest(questId, signal),
+          staleTime: 0,
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.events(questId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["quests", projectId],
+        });
+        return;
+      }
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.quest(questId), context.previous);
+      }
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.quest(questId), updated);
+      void queryClient.invalidateQueries({
+        queryKey: ["quests", projectId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.events(questId),
+      });
+    },
+  });
+
+  /** Append one or more checklist items, then seed the detail cache. */
+  const appendMutation = useMutation({
+    mutationFn: (titles: string[]) => appendChecklist(questId, { titles }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.quest(questId), updated);
+      void queryClient.invalidateQueries({
+        queryKey: ["quests", projectId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.events(questId),
+      });
+    },
+  });
+
   const archiveMutation = useMutation({
     mutationFn: () => archiveQuest(questId, { reason: "dropped" }),
     onSuccess: (archivedQuest) => {
       // Drop the card from board caches immediately; the refetch below is the
       // source of truth once the server responds. Only summary-compatible
-      // fields are copied: the detail response carries PartyMember[]/Floor[]
-      // while list items carry PartySummary[]/{done,total}.
+      // fields are copied: the detail response carries PartyMember[] while list
+      // items carry PartySummary[].
       queryClient.setQueriesData<QuestSummary[]>(
         { queryKey: ["quests", projectId] },
         (list) =>
@@ -291,11 +389,27 @@ export function QuestDrawer({
     tagMutation.mutate(nextTags);
   };
 
+  const changeKind = (next: QuestKind) => {
+    if (!quest) {
+      return;
+    }
+    const current = quest.kind ?? "fix";
+    if (current !== next) {
+      updateMutation.mutate({ kind: next });
+    }
+  };
+
   const overlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
       onClose();
     }
   };
+
+  const kind: QuestKind = quest?.kind ?? "fix";
+  const kindFields = ko.quest.kindFields[kind];
+  const toggleConflict =
+    toggleMutation.error instanceof ApiClientError &&
+    toggleMutation.error.code === "CHECKLIST_CONFLICT";
 
   return createPortal(
     <div
@@ -306,21 +420,16 @@ export function QuestDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex h-full w-full max-w-xl flex-col rounded-none border-l-[1.5px] border-line-strong bg-paper"
+        className="flex h-full w-[40vw] min-w-[360px] max-w-[560px] flex-col rounded-none border-l-[1.5px] border-line-strong bg-paper"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 id={titleId} className="text-base font-semibold text-ink">
+          <h2 id={titleId} className="text-[18px] font-semibold text-ink">
             {ko.board.drawer.title}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={ko.common.close}
-            className="rounded-sm p-1 text-ink transition-colors hover:bg-sunken"
-          >
-            <Icon name="close" size={32} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            {ko.common.close}
+          </Button>
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-4">
@@ -391,35 +500,25 @@ export function QuestDrawer({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <label
-                    htmlFor={`${titleInputId}-rank`}
-                    className="text-sm font-medium text-muted"
+              <div
+                role="group"
+                aria-label={ko.quest.kindLabel}
+                data-testid="quest-kind"
+                className="flex items-center gap-1.5"
+              >
+                {QUEST_KINDS.map((value) => (
+                  <Button
+                    key={value}
+                    size="sm"
+                    variant={kind === value ? "primary" : "secondary"}
+                    aria-pressed={kind === value}
+                    data-kind={value}
+                    disabled={updateMutation.isPending}
+                    onClick={() => changeKind(value)}
                   >
-                    {ko.quest.rank}
-                  </label>
-                  <select
-                    id={`${titleInputId}-rank`}
-                    value={quest.rank ?? ""}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      updateMutation.mutate({
-                        rank: value === "" ? null : (value as Rank),
-                      });
-                    }}
-                    aria-label={ko.quest.rank}
-                    className="h-8 rounded-sm border-[1.5px] border-line-strong bg-paper px-2 text-sm text-ink"
-                  >
-                    <option value="">{ko.quest.rankNone}</option>
-                    {RANKS.map((rank) => (
-                      <option key={rank} value={rank}>
-                        {ko.quest.ranks[rank]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <RankBadge rank={quest.rank} size={64} />
+                    {ko.quest.kinds[value]}
+                  </Button>
+                ))}
               </div>
 
               <TagEditor
@@ -431,10 +530,10 @@ export function QuestDrawer({
 
               <EditableTextSection
                 field="situation"
-                label={ko.board.drawer.situation}
+                label={kindFields.situation}
                 value={quest.situation}
-                placeholder={ko.quest.situationPlaceholder}
-                emptyText={ko.board.drawer.emptySituation}
+                placeholder={kindFields.situationPlaceholder}
+                emptyText={kindFields.emptySituation}
                 onSave={(next) => {
                   if (next !== quest.situation) {
                     updateMutation.mutate({ situation: next });
@@ -443,21 +542,52 @@ export function QuestDrawer({
                 disabled={updateMutation.isPending}
               />
 
-              <EditableTextSection
-                field="direction"
-                label={ko.board.drawer.direction}
-                value={quest.direction}
-                placeholder={ko.quest.directionPlaceholder}
-                emptyText={ko.board.drawer.emptyDirection}
-                onSave={(next) => {
-                  if (next !== quest.direction) {
-                    updateMutation.mutate({ direction: next });
-                  }
-                }}
-                disabled={updateMutation.isPending}
-              />
+              <div className="space-y-1.5">
+                <EditableTextSection
+                  field="direction"
+                  label={kindFields.direction}
+                  value={quest.direction}
+                  placeholder={kindFields.directionPlaceholder}
+                  emptyText={kindFields.emptyDirection}
+                  onSave={(next) => {
+                    if (next !== quest.direction) {
+                      updateMutation.mutate({ direction: next });
+                    }
+                  }}
+                  disabled={updateMutation.isPending}
+                  renderRead={(value) => (
+                    <ChecklistText
+                      value={value}
+                      onToggle={(item, done) =>
+                        toggleMutation.mutate({
+                          index: item.index,
+                          text: item.text,
+                          done,
+                        })
+                      }
+                    />
+                  )}
+                />
 
-              <QuestFloors projectId={projectId} quest={quest} />
+                <ChecklistAddField
+                  pending={appendMutation.isPending}
+                  onSubmit={(titles) => appendMutation.mutate(titles)}
+                />
+
+                {appendMutation.isError ? (
+                  <p role="alert" className="text-xs text-brick">
+                    {ko.board.drawer.checklist.addFailed}
+                  </p>
+                ) : null}
+
+                {toggleMutation.isError && !toggleConflict ? (
+                  <p role="alert" className="text-xs text-brick">
+                    {ko.board.drawer.checklist.toggleFailed}
+                  </p>
+                ) : null}
+              </div>
+
+              <QuestRefs projectId={projectId} quest={quest} />
 
               <EventTimeline
                 events={eventsQuery.data}
@@ -492,7 +622,6 @@ export function QuestDrawer({
               {quest.stage === "board" || quest.stage === "dungeon" ? (
                 <Button
                   variant="primary"
-                  icon="cleared"
                   disabled={clearMutation.isPending || archiveMutation.isPending}
                   onClick={() => clearMutation.mutate()}
                 >
@@ -503,7 +632,6 @@ export function QuestDrawer({
               ) : null}
               <Button
                 variant="danger"
-                icon="dropped"
                 onClick={() => {
                   archiveMutation.reset();
                   setConfirmArchive(true);
@@ -526,14 +654,12 @@ export function QuestDrawer({
             role="status"
             className="clear-celebration flex items-center gap-3 rounded-sm border-[1.5px] border-line-strong bg-paper px-4 py-3 shadow-hard"
           >
-            <Icon name="cleared" size={64} />
             <div className="flex flex-col gap-1">
               <p className="font-pixel text-[22px] leading-tight text-ink">
                 {ko.board.drawer.clear.celebrationTitle}
               </p>
               {celebration.amount !== null ? (
                 <p className="flex items-center gap-1 font-pixel text-[16px] text-gold">
-                  <Icon name="xp" size={32} />
                   {ko.board.drawer.clear.reward(celebration.amount)}
                 </p>
               ) : null}

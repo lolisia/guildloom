@@ -92,6 +92,7 @@ const QUESTS: QuestSummary[] = [
     number: 1,
     title: "기존 의뢰",
     stage: "board",
+    kind: "fix",
     rank: null,
     orderKey: "a0",
     tags: [],

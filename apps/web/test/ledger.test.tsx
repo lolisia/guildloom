@@ -94,6 +94,7 @@ const QUESTS: QuestSummary[] = [
     number: 1,
     title: "Alpha",
     stage: "board",
+    kind: "fix",
     rank: "C",
     orderKey: "a0",
     tags: ["긴급"],
@@ -117,6 +118,7 @@ const QUESTS: QuestSummary[] = [
     number: 2,
     title: "Beta",
     stage: "dungeon",
+    kind: "feature",
     rank: "A",
     orderKey: "a1",
     tags: ["버그"],
@@ -140,6 +142,7 @@ const QUESTS: QuestSummary[] = [
     number: 3,
     title: "Gamma",
     stage: "archived",
+    kind: "fix",
     rank: null,
     orderKey: "a2",
     tags: ["긴급"],
@@ -157,7 +160,7 @@ const QUEST_DETAIL: Quest = {
   ...QUESTS[0]!,
   projectId: 1,
   situation: "상황",
-  direction: "방향",
+  direction: "- [x] 1층: 상황 정리",
   archiveReason: null,
   party: [
     {
@@ -169,15 +172,8 @@ const QUEST_DETAIL: Quest = {
     },
   ],
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 상황 정리",
-      orderKey: "a0",
-      doneAt: Date.UTC(2026, 0, 4, 3, 0, 0),
-      doneBy: { id: 1, displayName: "김모험" },
-    },
-  ],
+  floors: { done: 1, total: 1 },
+  refs: [],
   firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 

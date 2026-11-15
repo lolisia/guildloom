@@ -1,22 +1,38 @@
 // @vitest-environment node
 /**
- * Drawer floors and boss fight (T09).
+ * Quest drawer checklist, kind, references, history and boss flow (F1).
  *
- * Covers the M2a dungeon checklist and the clear/retry flow against a stateful
- * API stub:
+ * Covers the F1 feedback against a stateful API stub:
  *
- * - Enter in the add field is ignored while an IME composition is active, and
- *   a multi-line paste adds one floor per non-empty line;
- * - checking/unchecking, renaming, reordering (dnd-kit planner) and deleting a
- *   floor call the exact `/api/floors/*` endpoints and refresh the detail,
- *   event log and `["quests", projectId]` list prefix;
+ * - direction checklist items toggle optimistically through
+ *   `POST /api/quests/:id/checklist/:index { done, text }`, a
+ *   `CHECKLIST_CONFLICT` refetches the quest and toasts;
+ * - the layers field appends one title per line through
+ *   `POST /api/quests/:id/checklist`, ignores the IME composition Enter and
+ *   turns multi-line pastes into one title per line;
+ * - the 수정/신규 segments PATCH `{ kind }` and swap the field labels and
+ *   placeholders;
+ * - reference documents are added on Enter, URLs open in a new tab, paths copy
+ *   and rows delete through `DELETE /api/refs/:id`;
+ * - the adventure log is collapsed to the three most recent key events and
+ *   expands to the full history;
  * - the boss banner renders the waiting copy, retry cannot be submitted with a
  *   blank comment and clearing shows the 던전 클리어! celebration with the
  *   caller's own XP and opens the T06 LEVEL UP modal.
  */
 import "./domEnvironment";
 
-import type { Floor, Quest, UserProfile } from "@guildloom/shared";
+import {
+  appendChecklistItems,
+  parseChecklist,
+  refKind,
+  setChecklistItem,
+  type Quest,
+  type QuestEvent,
+  type QuestRef,
+  type ToggleChecklistRequest,
+  type UserProfile,
+} from "@guildloom/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -29,10 +45,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import LevelUpModal from "../src/components/LevelUpModal";
-import { planFloorMove } from "../src/components/quest/floorMove";
 import { QuestDrawer } from "../src/components/quest/QuestDrawer";
 import { ko } from "../src/i18n/ko";
 import { useLevelUpStore } from "../src/lib/levelUp";
+import { useToastStore } from "../src/lib/toast";
 
 // Testing Library's `screen` singleton is created when its module loads, which
 // happens before this file installs the jsdom window. Bind the queries to the
@@ -51,31 +67,14 @@ const HERO: UserProfile = {
 
 const OTHER_REWARD_USER_ID = 2;
 
-function makeFloor(
-  id: number,
-  title: string,
-  orderKey: string,
-  doneAt: number | null = null,
-): Floor {
-  return {
-    id,
-    title,
-    orderKey,
-    doneAt,
-    doneBy:
-      doneAt === null
-        ? null
-        : { id: HERO.id, displayName: HERO.displayName },
-  };
-}
-
 function baseQuest(overrides: Partial<Quest> = {}): Quest {
   return {
     id: 1,
     projectId: 1,
     number: 42,
-    title: "층 테스트 의뢰",
+    title: "체크리스트 의뢰",
     stage: "board",
+    kind: "fix",
     rank: "C",
     orderKey: "a0",
     tags: [],
@@ -89,17 +88,49 @@ function baseQuest(overrides: Partial<Quest> = {}): Quest {
     direction: "",
     archiveReason: null,
     nominations: [],
-    floors: [],
+    floors: { done: 0, total: 0 },
+    refs: [],
     firstClaimedAt: NOW,
     ...overrides,
   };
 }
 
-const FLOORS: Floor[] = [
-  makeFloor(1, "1층: 재현", "a0"),
-  makeFloor(2, "2층: 수정", "a1"),
-  makeFloor(3, "3층: 검증", "a2"),
-];
+function makeRef(
+  id: number,
+  target: string,
+  label: string | null = null,
+): QuestRef {
+  return {
+    id,
+    label,
+    target,
+    kind: refKind(target),
+    createdBy: { id: HERO.id, displayName: HERO.displayName },
+    createdAt: NOW,
+  };
+}
+
+function makeEvent(
+  id: number,
+  type: QuestEvent["type"],
+  createdAt: number,
+): QuestEvent {
+  return {
+    id,
+    questId: 1,
+    projectId: 1,
+    type,
+    payload:
+      type === "quest_posted"
+        ? { number: 42, title: "체크리스트 의뢰" }
+        : type === "quest_moved"
+          ? { from: "board", to: "dungeon" }
+          : {},
+    actor: { id: HERO.id, displayName: HERO.displayName },
+    familiarId: null,
+    createdAt,
+  };
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return {
@@ -140,12 +171,90 @@ function parseBody(init: RequestInit): unknown {
   }
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+}
+
+/** A promise whose resolution the test controls. */
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+interface StubOptions {
+  events?: QuestEvent[];
+  /** Hold checklist toggles until the test resolves them (optimism check). */
+  holdChecklistToggle?: boolean;
+  /** Answer every checklist toggle with 409 CHECKLIST_CONFLICT. */
+  conflictChecklist?: boolean;
+}
+
+interface PendingToggle {
+  index: number;
+  body: ToggleChecklistRequest;
+  gate: Deferred<Response>;
+}
+
+/** Replace `direction` and keep the cached checklist counters in sync. */
+function withDirection(quest: Quest, direction: string): Quest {
+  const { done, total } = parseChecklist(direction);
+  return { ...quest, direction, floors: { done, total } };
+}
+
 /** Stateful API stub covering the endpoints the drawer touches. */
-function stubApi(initialQuest: Quest) {
-  const state = {
-    quest: { ...initialQuest, floors: [...initialQuest.floors] },
+function stubApi(initialQuest: Quest, options: StubOptions = {}) {
+  const state: { quest: Quest; events: QuestEvent[] } = {
+    quest: {
+      ...initialQuest,
+      refs: [...(initialQuest.refs ?? [])],
+    },
+    events: [...(options.events ?? [])],
   };
   const calls: RecordedCall[] = [];
+  const pendingToggles: PendingToggle[] = [];
+
+  const toggleResponse = (
+    index: number,
+    body: ToggleChecklistRequest,
+  ): Response => {
+    if (options.conflictChecklist) {
+      return jsonResponse(
+        {
+          error: {
+            code: "CHECKLIST_CONFLICT",
+            message: "checklist changed",
+          },
+        },
+        409,
+      );
+    }
+    const item = parseChecklist(state.quest.direction).items.find(
+      (entry) => entry.index === index,
+    );
+    if (!item || item.text !== body.text) {
+      return jsonResponse(
+        {
+          error: {
+            code: "CHECKLIST_CONFLICT",
+            message: "checklist changed",
+          },
+        },
+        409,
+      );
+    }
+    state.quest = withDirection(
+      state.quest,
+      setChecklistItem(state.quest.direction, index, body.done),
+    );
+    return jsonResponse(state.quest);
+  };
 
   const fetchMock = vi.fn(
     async (
@@ -165,110 +274,74 @@ function stubApi(initialQuest: Quest) {
         return jsonResponse(state.quest);
       }
       if (method === "GET" && path === "/api/quests/1/events") {
-        return jsonResponse([]);
+        return jsonResponse(state.events);
       }
       if (method === "GET" && path === "/api/projects/1/tags") {
         return jsonResponse([]);
       }
 
-      if (method === "POST" && path === "/api/quests/1/floors") {
+      if (method === "PATCH" && path === "/api/quests/1") {
+        const update = body as Partial<Quest>;
+        state.quest = {
+          ...(update.direction === undefined
+            ? { ...state.quest, ...update }
+            : {
+                ...withDirection(state.quest, update.direction),
+                ...update,
+                direction: update.direction,
+              }),
+        };
+        return jsonResponse(state.quest);
+      }
+
+      const toggleMatch = path.match(
+        /^\/api\/quests\/1\/checklist\/(\d+)$/,
+      );
+      if (method === "POST" && toggleMatch) {
+        const index = Number(toggleMatch[1]);
+        const toggle = body as ToggleChecklistRequest;
+        if (options.holdChecklistToggle) {
+          const gate = deferred<Response>();
+          pendingToggles.push({ index, body: toggle, gate });
+          return gate.promise;
+        }
+        return toggleResponse(index, toggle);
+      }
+
+      if (method === "POST" && path === "/api/quests/1/checklist") {
         const titles = (body as { titles: string[] }).titles;
-        const startId =
-          Math.max(0, ...state.quest.floors.map((floor) => floor.id)) + 1;
-        const created = titles.map((title, index) =>
-          makeFloor(startId + index, title, `k${startId + index}`),
+        state.quest = withDirection(
+          state.quest,
+          appendChecklistItems(state.quest.direction, titles),
+        );
+        return jsonResponse(state.quest);
+      }
+
+      if (method === "POST" && path === "/api/quests/1/refs") {
+        const request = body as { target: string; label?: string };
+        const refs = state.quest.refs ?? [];
+        const created = makeRef(
+          Math.max(0, ...refs.map((entry) => entry.id)) + 1,
+          request.target,
+          request.label?.trim() ? request.label.trim() : null,
         );
         state.quest = {
           ...state.quest,
-          floors: [...state.quest.floors, ...created],
+          refs: [...refs, created],
         };
-        return jsonResponse(state.quest.floors);
+        return jsonResponse(created, 201);
       }
 
-      const floorMatch = path.match(/^\/api\/floors\/(\d+)$/);
-      if (floorMatch) {
-        const floorId = Number(floorMatch[1]);
-
-        if (method === "PATCH") {
-          const existing = state.quest.floors.find(
-            (floor) => floor.id === floorId,
-          );
-          if (!existing) {
-            return jsonResponse(
-              { error: { code: "not_found", message: "floor not found" } },
-              404,
-            );
-          }
-          const update = body as { title?: string; done?: boolean };
-          const updated: Floor = { ...existing };
-          if (update.title !== undefined) {
-            updated.title = update.title;
-          }
-          if (update.done !== undefined) {
-            updated.doneAt = update.done ? NOW : null;
-            updated.doneBy = update.done
-              ? { id: HERO.id, displayName: HERO.displayName }
-              : null;
-          }
-          state.quest = {
-            ...state.quest,
-            floors: state.quest.floors.map((floor) =>
-              floor.id === floorId ? updated : floor,
-            ),
-          };
-          return jsonResponse(updated);
-        }
-
-        if (method === "DELETE") {
-          state.quest = {
-            ...state.quest,
-            floors: state.quest.floors.filter(
-              (floor) => floor.id !== floorId,
-            ),
-          };
-          return noContentResponse();
-        }
-      }
-
-      const moveMatch = path.match(/^\/api\/floors\/(\d+)\/move$/);
-      if (method === "POST" && moveMatch) {
-        const floorId = Number(moveMatch[1]);
-        const moved = state.quest.floors.find(
-          (floor) => floor.id === floorId,
-        );
-        if (!moved) {
-          return jsonResponse(
-            { error: { code: "not_found", message: "floor not found" } },
-            404,
-          );
-        }
-        const move = body as { beforeId?: number; afterId?: number };
-        const rest = state.quest.floors.filter(
-          (floor) => floor.id !== floorId,
-        );
-        let insertIndex = rest.length;
-        if (move.beforeId !== undefined) {
-          const index = rest.findIndex(
-            (floor) => floor.id === move.beforeId,
-          );
-          if (index >= 0) {
-            insertIndex = index + 1;
-          }
-        } else if (move.afterId !== undefined) {
-          const index = rest.findIndex(
-            (floor) => floor.id === move.afterId,
-          );
-          if (index >= 0) {
-            insertIndex = index;
-          }
-        }
-        const updated: Floor = {
-          ...moved,
-          orderKey: `moved-${floorId}-${NOW}`,
+      const refMatch = path.match(/^\/api\/refs\/(\d+)$/);
+      if (method === "DELETE" && refMatch) {
+        const refId = Number(refMatch[1]);
+        state.quest = {
+          ...state.quest,
+          refs: (state.quest.refs ?? []).filter(
+            (entry) => entry.id !== refId,
+          ),
         };
-        rest.splice(insertIndex, 0, updated);
-        state.quest = { ...state.quest, floors: rest };
-        return jsonResponse(updated);
+        return noContentResponse();
       }
 
       if (method === "POST" && path === "/api/quests/1/clear") {
@@ -296,7 +369,19 @@ function stubApi(initialQuest: Quest) {
   );
 
   vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, state, calls };
+  return {
+    fetchMock,
+    state,
+    calls,
+    /** Resolve the oldest held checklist toggle with the server result. */
+    acceptPendingToggle(): void {
+      const pending = pendingToggles.shift();
+      if (!pending) {
+        throw new Error("no checklist toggle is pending");
+      }
+      pending.gate.resolve(toggleResponse(pending.index, pending.body));
+    },
+  };
 }
 
 function callsTo(
@@ -324,8 +409,12 @@ function createQueryClient(): QueryClient {
 }
 
 /** Render the drawer plus the real LEVEL UP modal and wait for the detail. */
-async function openDrawer(quest: Quest, client?: QueryClient) {
-  const api = stubApi(quest);
+async function openDrawer(
+  quest: Quest,
+  options: StubOptions = {},
+  client?: QueryClient,
+) {
+  const api = stubApi(quest, options);
   const queryClient = client ?? createQueryClient();
   const user = userEvent.setup();
 
@@ -339,7 +428,7 @@ async function openDrawer(quest: Quest, client?: QueryClient) {
   const dialog = await screen.findByRole("dialog", {
     name: ko.board.drawer.title,
   });
-  await within(dialog).findByTestId("quest-floors");
+  await within(dialog).findByTestId("quest-dungeon-placeholder");
   // PartySection only renders 참여 once `/api/auth/me` resolved, so this also
   // guarantees the clear success handler knows the caller's user id.
   await within(dialog).findByRole("button", { name: ko.party.join });
@@ -359,8 +448,17 @@ function dispatchMultiLinePaste(
   fireEvent(element, event);
 }
 
+function stubClipboard(
+  writeText: (text: string) => Promise<void>,
+) {
+  return vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockImplementation(writeText);
+}
+
 beforeEach(() => {
   useLevelUpStore.getState().dismiss();
+  useToastStore.getState().clear();
 });
 
 afterEach(() => {
@@ -368,159 +466,73 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   useLevelUpStore.getState().dismiss();
+  useToastStore.getState().clear();
 });
 
-describe("QuestFloors", () => {
-  it("adds a floor on Enter and ignores the IME composition Enter", async () => {
-    const { calls } = await openDrawer(baseQuest({ floors: FLOORS }));
-    const input = screen.getByRole("textbox", {
-      name: ko.board.drawer.floors.add,
-    });
-
-    fireEvent.change(input, { target: { value: "4층: 배포" } });
-    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
-
-    expect(callsTo(calls, "POST", "/api/quests/1/floors")).toHaveLength(0);
-    expect(input).toHaveValue("4층: 배포");
-
-    fireEvent.keyDown(input, { key: "Enter" });
-
-    await waitFor(() =>
-      expect(callsTo(calls, "POST", "/api/quests/1/floors")).toHaveLength(1),
-    );
-    expect(callsTo(calls, "POST", "/api/quests/1/floors")[0]?.body).toEqual({
-      titles: ["4층: 배포"],
-    });
-    expect(await screen.findByDisplayValue("4층: 배포")).toBeInTheDocument();
-  });
-
-  it("renames a floor on Enter and ignores the IME composition Enter", async () => {
-    const { calls } = await openDrawer(baseQuest({ floors: FLOORS }));
-    const titleInput = screen.getByRole("textbox", {
-      name: ko.board.drawer.floors.titleLabel("1층: 재현"),
-    });
-
-    fireEvent.change(titleInput, { target: { value: "1층: 재현 완료" } });
-    fireEvent.keyDown(titleInput, { key: "Enter", isComposing: true });
-
-    expect(callsTo(calls, "PATCH", "/api/floors/1")).toHaveLength(0);
-
-    fireEvent.keyDown(titleInput, { key: "Enter" });
-
-    await waitFor(() =>
-      expect(callsTo(calls, "PATCH", "/api/floors/1")).toHaveLength(1),
-    );
-    expect(callsTo(calls, "PATCH", "/api/floors/1")[0]?.body).toEqual({
-      title: "1층: 재현 완료",
-    });
-  });
-
-  it("adds one floor per non-empty line when multi-line text is pasted", async () => {
-    const { calls } = await openDrawer(baseQuest({ floors: FLOORS }));
-    const input = screen.getByRole("textbox", {
-      name: ko.board.drawer.floors.add,
-    });
-
-    dispatchMultiLinePaste(input, "4층: 배포\n 5층: 공지 \n\n6층: 회고");
-
-    await waitFor(() =>
-      expect(callsTo(calls, "POST", "/api/quests/1/floors")).toHaveLength(1),
-    );
-    expect(callsTo(calls, "POST", "/api/quests/1/floors")[0]?.body).toEqual({
-      titles: ["4층: 배포", "5층: 공지", "6층: 회고"],
-    });
-
-    for (const title of ["4층: 배포", "5층: 공지", "6층: 회고"]) {
-      expect(await screen.findByDisplayValue(title)).toBeInTheDocument();
-    }
-  });
-
-  it("checks and unchecks a floor through PATCH /api/floors/:id { done }", async () => {
-    const { calls, user } = await openDrawer(baseQuest({ floors: FLOORS }));
-    const checkbox = screen.getByRole("checkbox", {
-      name: ko.board.drawer.floors.check("1층: 재현"),
-    });
-
-    expect(checkbox).not.toBeChecked();
-    await user.click(checkbox);
-
-    await waitFor(() =>
-      expect(callsTo(calls, "PATCH", "/api/floors/1")).toHaveLength(1),
-    );
-    expect(callsTo(calls, "PATCH", "/api/floors/1")[0]?.body).toEqual({
-      done: true,
-    });
-    await waitFor(() => expect(checkbox).toBeChecked());
-
-    await user.click(checkbox);
-
-    await waitFor(() =>
-      expect(callsTo(calls, "PATCH", "/api/floors/1")).toHaveLength(2),
-    );
-    expect(callsTo(calls, "PATCH", "/api/floors/1")[1]?.body).toEqual({
-      done: false,
-    });
-    await waitFor(() => expect(checkbox).not.toBeChecked());
-  });
-
-  it("reorders and deletes floors through the move/delete endpoints", async () => {
-    const { calls, user } = await openDrawer(baseQuest({ floors: FLOORS }));
-
-    await user.click(
-      screen.getByRole("button", {
-        name: ko.board.drawer.floors.moveDown("1층: 재현"),
+describe("QuestDrawer checklist", () => {
+  it("checks a direction item optimistically and posts { done, text }", async () => {
+    const { calls, dialog, user, acceptPendingToggle } = await openDrawer(
+      baseQuest({
+        direction: "- [ ] 재현\n- [x] 수정\n- [ ] 검증",
+        floors: { done: 1, total: 3 },
       }),
+      { holdChecklistToggle: true },
     );
 
+    const checkbox = within(dialog).getByRole("checkbox", { name: "재현" });
+    expect(checkbox).not.toBeChecked();
+
+    fireEvent.click(checkbox);
+
+    // Optimistic: the box flips before the held request resolves.
+    await waitFor(() => expect(checkbox).toBeChecked());
     await waitFor(() =>
-      expect(callsTo(calls, "POST", "/api/floors/1/move")).toHaveLength(1),
+      expect(callsTo(calls, "POST", "/api/quests/1/checklist/0")).toHaveLength(
+        1,
+      ),
     );
-    expect(callsTo(calls, "POST", "/api/floors/1/move")[0]?.body).toEqual({
-      beforeId: 2,
-      afterId: 3,
-    });
+    expect(
+      callsTo(calls, "POST", "/api/quests/1/checklist/0")[0]?.body,
+    ).toEqual({ done: true, text: "재현" });
 
-    const deleteButton = await screen.findByRole("button", {
-      name: ko.board.drawer.floors.delete("2층: 수정"),
-    });
-    await user.click(deleteButton);
-
+    acceptPendingToggle();
     await waitFor(() =>
-      expect(callsTo(calls, "DELETE", "/api/floors/2")).toHaveLength(1),
+      expect(callsTo(calls, "GET", "/api/quests/1").length).toBeGreaterThan(0),
     );
-    await waitFor(() =>
-      expect(
-        screen.queryByDisplayValue("2층: 수정"),
-      ).not.toBeInTheDocument(),
-    );
+    expect(checkbox).toBeChecked();
 
-    // The dnd-kit planner keeps the arrayMove semantics used by the row.
-    expect(planFloorMove(FLOORS, 1, 3)).toMatchObject({
-      floorId: 1,
-      beforeId: 3,
-    });
-    expect(planFloorMove(FLOORS, 1, 3)).not.toHaveProperty("afterId");
+    await user.click(checkbox);
+    await waitFor(() =>
+      expect(callsTo(calls, "POST", "/api/quests/1/checklist/0")).toHaveLength(
+        2,
+      ),
+    );
+    expect(
+      callsTo(calls, "POST", "/api/quests/1/checklist/0")[1]?.body,
+    ).toEqual({ done: false, text: "재현" });
   });
 
-  it("invalidates the detail, event log and quest list prefix after a floor change", async () => {
-    const queryClient = createQueryClient();
-    queryClient.setQueryData(["quests", 1, { stage: "board" }], []);
-    const { calls, user } = await openDrawer(
-      baseQuest({ floors: FLOORS }),
-      queryClient,
+  it("refetches the quest and toasts on CHECKLIST_CONFLICT", async () => {
+    const { calls, dialog, queryClient, user, state } = await openDrawer(
+      baseQuest({ direction: "- [ ] 재현" }),
+      { conflictChecklist: true },
     );
 
     const detailBefore = callsTo(calls, "GET", "/api/quests/1").length;
     const eventsBefore = callsTo(calls, "GET", "/api/quests/1/events").length;
 
-    await user.click(
-      screen.getByRole("checkbox", {
-        name: ko.board.drawer.floors.check("2층: 수정"),
-      }),
+    // The server has moved the item's text; the stale click must reload.
+    state.quest = withDirection(
+      state.quest,
+      "- [ ] 재현 (다른 사람이 수정)",
     );
 
+    await user.click(within(dialog).getByRole("checkbox", { name: "재현" }));
+
     await waitFor(() =>
-      expect(callsTo(calls, "PATCH", "/api/floors/2")).toHaveLength(1),
+      expect(
+        callsTo(calls, "POST", "/api/quests/1/checklist/0"),
+      ).toHaveLength(1),
     );
     await waitFor(() =>
       expect(callsTo(calls, "GET", "/api/quests/1").length).toBeGreaterThan(
@@ -532,19 +544,384 @@ describe("QuestFloors", () => {
         callsTo(calls, "GET", "/api/quests/1/events").length,
       ).toBeGreaterThan(eventsBefore),
     );
+    expect(
+      within(dialog).getByRole("checkbox", {
+        name: "재현 (다른 사람이 수정)",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      useToastStore
+        .getState()
+        .toasts.some(
+          (toast) => toast.message === ko.board.drawer.checklist.conflict,
+        ),
+    ).toBe(true);
+    expect(
+      queryClient.getQueryData<Quest>(["quest", 1])?.direction,
+    ).toBe("- [ ] 재현 (다른 사람이 수정)");
+  });
+
+  it("appends layers on Enter and multi-line paste, ignoring the IME Enter", async () => {
+    const { calls, dialog } = await openDrawer(
+      baseQuest({ direction: "- [ ] 재현" }),
+    );
+    const input = within(dialog).getByRole("textbox", {
+      name: ko.board.drawer.checklist.addLabel,
+    });
+
+    fireEvent.change(input, { target: { value: "4층: 배포" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+    expect(callsTo(calls, "POST", "/api/quests/1/checklist")).toHaveLength(0);
+    expect(input).toHaveValue("4층: 배포");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(callsTo(calls, "POST", "/api/quests/1/checklist")).toHaveLength(1),
+    );
+    expect(
+      callsTo(calls, "POST", "/api/quests/1/checklist")[0]?.body,
+    ).toEqual({ titles: ["4층: 배포"] });
+    await within(dialog).findByRole("checkbox", { name: "4층: 배포" });
+
+    dispatchMultiLinePaste(input, "5층: 공지\n 6층: 회고 \n\n7층: 정리");
+
+    await waitFor(() =>
+      expect(callsTo(calls, "POST", "/api/quests/1/checklist")).toHaveLength(2),
+    );
+    expect(
+      callsTo(calls, "POST", "/api/quests/1/checklist")[1]?.body,
+    ).toEqual({ titles: ["5층: 공지", "6층: 회고", "7층: 정리"] });
+    for (const title of ["5층: 공지", "6층: 회고", "7층: 정리"]) {
+      expect(
+        await within(dialog).findByRole("checkbox", { name: title }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("edits the raw direction text without touching the checklist markup", async () => {
+    const { calls, dialog, user } = await openDrawer(
+      baseQuest({ direction: "- [ ] 재현\n메모 https://example.com" }),
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: `${ko.quest.kindFields.fix.direction} ${ko.common.edit}`,
+      }),
+    );
+    const textarea = within(dialog).getByRole("textbox", {
+      name: ko.quest.kindFields.fix.direction,
+    });
+    expect(textarea).toHaveValue("- [ ] 재현\n메모 https://example.com");
+
+    fireEvent.change(textarea, {
+      target: { value: "- [x] 재현\n메모 https://example.com" },
+    });
+    fireEvent.blur(textarea);
+
+    await waitFor(() =>
+      expect(callsTo(calls, "PATCH", "/api/quests/1")[0]?.body).toEqual({
+        direction: "- [x] 재현\n메모 https://example.com",
+      }),
+    );
+  });
+});
+
+describe("QuestDrawer kind segments", () => {
+  it("patches the kind and swaps the situation/direction labels and placeholders", async () => {
+    const { calls, dialog, user } = await openDrawer(
+      baseQuest({ kind: "fix", situation: "상황", direction: "방향" }),
+    );
+
+    const fix = within(dialog).getByRole("button", {
+      name: ko.quest.kinds.fix,
+    });
+    const feature = within(dialog).getByRole("button", {
+      name: ko.quest.kinds.feature,
+    });
+    expect(fix).toHaveAttribute("aria-pressed", "true");
+    expect(feature).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: `${ko.quest.kindFields.fix.situation} ${ko.common.edit}`,
+      }),
+    );
+    expect(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.fix.situation,
+      }),
+    ).toHaveAttribute(
+      "placeholder",
+      ko.quest.kindFields.fix.situationPlaceholder,
+    );
+    fireEvent.keyDown(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.fix.situation,
+      }),
+      { key: "Escape" },
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: `${ko.quest.kindFields.fix.direction} ${ko.common.edit}`,
+      }),
+    );
+    expect(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.fix.direction,
+      }),
+    ).toHaveAttribute(
+      "placeholder",
+      ko.quest.kindFields.fix.directionPlaceholder,
+    );
+    fireEvent.keyDown(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.fix.direction,
+      }),
+      { key: "Escape" },
+    );
+
+    await user.click(feature);
+
+    await waitFor(() =>
+      expect(callsTo(calls, "PATCH", "/api/quests/1")[0]?.body).toEqual({
+        kind: "feature",
+      }),
+    );
     await waitFor(() =>
       expect(
-        queryClient.getQueryState(["quests", 1, { stage: "board" }])
-          ?.isInvalidated,
+        within(dialog).getByRole("button", { name: ko.quest.kinds.feature }),
+      ).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(
+      within(dialog).getByRole("button", { name: ko.quest.kinds.fix }),
+    ).toHaveAttribute("aria-pressed", "false");
+
+    expect(
+      within(dialog).getByText(ko.quest.kindFields.feature.situation),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(ko.quest.kindFields.feature.direction),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: `${ko.quest.kindFields.feature.situation} ${ko.common.edit}`,
+      }),
+    );
+    expect(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.feature.situation,
+      }),
+    ).toHaveAttribute(
+      "placeholder",
+      ko.quest.kindFields.feature.situationPlaceholder,
+    );
+    fireEvent.keyDown(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.feature.situation,
+      }),
+      { key: "Escape" },
+    );
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: `${ko.quest.kindFields.feature.direction} ${ko.common.edit}`,
+      }),
+    );
+    expect(
+      within(dialog).getByRole("textbox", {
+        name: ko.quest.kindFields.feature.direction,
+      }),
+    ).toHaveAttribute(
+      "placeholder",
+      ko.quest.kindFields.feature.directionPlaceholder,
+    );
+  });
+
+  it("does not PATCH when the current kind is clicked again", async () => {
+    const { calls, dialog, user } = await openDrawer(baseQuest());
+    await user.click(
+      within(dialog).getByRole("button", { name: ko.quest.kinds.fix }),
+    );
+    expect(callsTo(calls, "PATCH", "/api/quests/1")).toHaveLength(0);
+  });
+});
+
+describe("QuestDrawer references", () => {
+  it("adds a reference on Enter, ignores IME/blank input and opens URLs in a new tab", async () => {
+    const { calls, dialog } = await openDrawer(baseQuest());
+    const input = within(dialog).getByRole("textbox", {
+      name: ko.board.drawer.refs.addLabel,
+    });
+    expect(input).toHaveAttribute(
+      "placeholder",
+      ko.board.drawer.refs.placeholder,
+    );
+
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(callsTo(calls, "POST", "/api/quests/1/refs")).toHaveLength(0);
+
+    fireEvent.change(input, {
+      target: { value: "https://example.com/spec" },
+    });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(callsTo(calls, "POST", "/api/quests/1/refs")).toHaveLength(0);
+    expect(input).toHaveValue("https://example.com/spec");
+
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(callsTo(calls, "POST", "/api/quests/1/refs")).toHaveLength(1),
+    );
+    expect(callsTo(calls, "POST", "/api/quests/1/refs")[0]?.body).toEqual({
+      target: "https://example.com/spec",
+    });
+
+    const link = await within(dialog).findByRole("link", {
+      name: "https://example.com/spec",
+    });
+    expect(link).toHaveAttribute("href", "https://example.com/spec");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
+    expect(input).toHaveValue("");
+  });
+
+  it("copies a path and toasts success or failure", async () => {
+    const pathRef = makeRef(3, "docs/login.md");
+    const { dialog } = await openDrawer(
+      baseQuest({ refs: [pathRef] }),
+    );
+    // userEvent.setup() installs its own clipboard stub, so spy after opening.
+    const writeText = vi.fn(async () => undefined);
+    stubClipboard(writeText);
+
+    const row = dialog.querySelector('[data-ref-id="3"]') as HTMLElement;
+    expect(row.querySelector("a")).toBeNull();
+    expect(within(row).getByText("docs/login.md")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(row).getByRole("button", {
+        name: ko.board.drawer.refs.copyPath,
+      }),
+    );
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("docs/login.md"));
+    await waitFor(() =>
+      expect(
+        useToastStore
+          .getState()
+          .toasts.some((toast) => toast.message === ko.common.copied),
       ).toBe(true),
     );
+
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    fireEvent.click(
+      within(row).getByRole("button", {
+        name: ko.board.drawer.refs.copyPath,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        useToastStore
+          .getState()
+          .toasts.some((toast) => toast.message === ko.common.copyFailed),
+      ).toBe(true),
+    );
+  });
+
+  it("deletes a reference through DELETE /api/refs/:id", async () => {
+    const urlRef = makeRef(4, "https://example.com/spec", "설계 명세");
+    const { calls, dialog, user } = await openDrawer(
+      baseQuest({ refs: [urlRef] }),
+    );
+
+    const link = within(dialog).getByRole("link", { name: "설계 명세" });
+    expect(link).toHaveAttribute("rel", "noreferrer");
+
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: ko.board.drawer.refs.remove("https://example.com/spec"),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(callsTo(calls, "DELETE", "/api/refs/4")).toHaveLength(1),
+    );
+    await waitFor(() =>
+      expect(
+        within(dialog).queryByRole("link", { name: "설계 명세" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+});
+
+describe("QuestDrawer adventure log", () => {
+  const events: QuestEvent[] = [
+    makeEvent(1, "quest_posted", NOW + 100),
+    makeEvent(2, "quest_edited", NOW + 150),
+    makeEvent(3, "member_joined", NOW + 200),
+    makeEvent(4, "quest_moved", NOW + 250),
+    makeEvent(5, "boss_engaged", NOW + 300),
+    makeEvent(6, "quest_cleared", NOW + 400),
+    makeEvent(7, "clear_revoked", NOW + 500),
+  ];
+
+  it("collapses to the three most recent key events and expands the full history", async () => {
+    const { dialog, user } = await openDrawer(baseQuest(), { events });
+
+    const collapsed = Array.from(
+      dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+    );
+    expect(collapsed.map((row) => Number(row.dataset.eventId))).toEqual([
+      5, 6, 7,
+    ]);
+    expect(collapsed.every((row) => row.querySelector("img") === null)).toBe(
+      true,
+    );
+
+    const toggle = within(dialog).getByRole("button", {
+      name: ko.board.drawer.showAllHistory(events.length),
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(
+        Array.from(
+          dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+        ).map((row) => Number(row.dataset.eventId)),
+      ).toEqual([1, 2, 3, 4, 5, 6, 7]),
+    );
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(3);
+  });
+
+  it("shows '아직 큰 사건은 없습니다' when only non-key events exist", async () => {
+    const { dialog } = await openDrawer(baseQuest(), {
+      events: [
+        makeEvent(1, "quest_edited", NOW + 100),
+        makeEvent(2, "quest_moved", NOW + 200),
+      ],
+    });
+
+    expect(
+      within(dialog).getByText(ko.board.drawer.keyEventsEmpty),
+    ).toBeInTheDocument();
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
   });
 });
 
 describe("Boss banner, retry and clear", () => {
   it("shows the boss banner and keeps retry disabled without a comment", async () => {
     const { calls, user } = await openDrawer(
-      baseQuest({ stage: "boss", floors: FLOORS }),
+      baseQuest({ stage: "boss", direction: "- [ ] 보스" }),
     );
 
     const banner = screen.getByTestId("boss-banner");
@@ -602,7 +979,7 @@ describe("Boss banner, retry and clear", () => {
 
   it("declares the clear from the boss banner and opens the level-up modal", async () => {
     const { calls, user } = await openDrawer(
-      baseQuest({ stage: "boss", floors: FLOORS }),
+      baseQuest({ stage: "boss", direction: "- [ ] 보스" }),
     );
 
     await user.click(
@@ -621,7 +998,7 @@ describe("Boss banner, retry and clear", () => {
     "declares the clear from the footer on the %s stage",
     async (stage) => {
       const { calls, user } = await openDrawer(
-        baseQuest({ stage, floors: FLOORS }),
+        baseQuest({ stage, direction: "- [x] 보스" }),
       );
 
       await user.click(

@@ -17,7 +17,7 @@ import {
   QUEST_KINDS,
   RANKS,
   STAGES,
-  type NotificationType,
+  type AnyNotificationType,
 } from "./constants.js";
 
 /** Numeric primary key (SQLite autoincrement). */
@@ -282,13 +282,13 @@ export const nominationStateSchema = z.enum(NOMINATION_STATES);
 /**
  * In-app notification type.
  *
- * The runtime enum includes every value in {@link NOTIFICATION_TYPES}
- * (`clear_revoked` included); the output type stays the pre-F1 union until the
- * web copy switch learns the new case.
+ * The runtime enum includes every value in {@link NOTIFICATION_TYPES}; the
+ * output type is the full F1 union (`clear_revoked` included) so the web copy
+ * switch can handle it exhaustively.
  */
 export const notificationTypeSchema = z.enum(
   NOTIFICATION_TYPES,
-) as unknown as z.ZodType<NotificationType, string>;
+) as unknown as z.ZodType<AnyNotificationType, string>;
 
 /** Bounty (현상금) shown on quest cards. */
 export const bountySchema = z.object({
@@ -333,21 +333,23 @@ export const nominationSchema = z.object({
 export type Nomination = z.infer<typeof nominationSchema>;
 
 /**
- * A floor (층) of the quest dungeon.
+ * Deprecated dungeon floor row.
  *
- * @deprecated Dungeon floors are replaced by quest checklists (F1); this shape
- * only keeps the not-yet-migrated floor routes compiling and is removed with
- * them.
+ * Not exported: floors are replaced by the direction checklist (F1). The shape
+ * survives inside {@link questSchema} only because the server's party routes
+ * still serialize an empty floor array through the shared detail schema
+ * (`loadQuestView` in `apps/server/src/routes/quests.ts`); the task that
+ * retires that wrapper deletes this shape together with the override.
+ *
+ * @deprecated Use {@link parseChecklist} on the quest `direction` instead.
  */
-export const floorSchema = z.object({
+const legacyFloorRowSchema = z.object({
   id: idSchema,
   title: z.string(),
   orderKey: z.string(),
   doneAt: timestampSchema.nullable(),
   doneBy: userRefSchema.nullable(),
 });
-/** @deprecated See {@link floorSchema}; removed with the floor routes. */
-export type Floor = z.infer<typeof floorSchema>;
 
 /** In-app notification row for the current user. */
 export const notificationSchema = z.object({
@@ -397,7 +399,14 @@ export const questSummarySchema = z.object({
 });
 export type QuestSummary = z.infer<typeof questSummarySchema>;
 
-/** Full quest data returned by detail endpoints. */
+/**
+ * Full quest data returned by detail endpoints.
+ *
+ * `floors` is the checklist progress parsed from `direction` for every quest
+ * route and for the web client. It still tolerates the deprecated floor row
+ * array (always empty today) because the server's party routes serialize their
+ * response through this schema until `loadQuestView` is retired.
+ */
 export const questSchema = questSummarySchema.extend({
   projectId: idSchema,
   situation: z.string(),
@@ -406,11 +415,16 @@ export const questSchema = questSummarySchema.extend({
   party: z.array(partyMemberSchema),
   nominations: z.array(nominationSchema),
   /**
-   * @deprecated Dungeon floors are replaced by checklists (F1). Kept as the
-   * detail array while the floor routes still exist; T04 removes it and the
-   * detail inherits the summary's `{ done, total }` instead.
+   * Checklist progress (`{ done, total }`), or the deprecated — always empty —
+   * floor row array the party routes still emit.
+   *
+   * @deprecated Read `direction` through {@link parseChecklist}; the union is
+   * removed once the party-route wrapper stops returning floor rows.
    */
-  floors: z.array(floorSchema),
+  floors: z.union([
+    questSummarySchema.shape.floors,
+    z.array(legacyFloorRowSchema),
+  ]),
   // Defaulted for new refs and optional until the server sends the list.
   refs: z.array(questRefSchema).default([]).optional(),
   bounty: bountySchema,
@@ -529,46 +543,6 @@ export type AppendChecklistRequest = z.infer<
   typeof appendChecklistRequestSchema
 >;
 
-/**
- * `POST /api/quests/:id/floors` request (층 추가).
- *
- * @deprecated Floors are replaced by checklists (F1); removed with the floor
- * routes.
- */
-export const addFloorsRequestSchema = z.object({
-  // Whitespace-only lines are allowed through the schema; the server drops
-  // them before creating floors.
-  titles: z.array(z.string().max(200)).min(1).max(50),
-});
-/** @deprecated See {@link addFloorsRequestSchema}. */
-export type AddFloorsRequest = z.infer<typeof addFloorsRequestSchema>;
-
-/**
- * `PATCH /api/floors/:id` request.
- *
- * @deprecated Floors are replaced by checklists (F1); removed with the floor
- * routes.
- */
-export const updateFloorRequestSchema = z.object({
-  title: z.string().trim().min(1).max(200).optional(),
-  done: z.boolean().optional(),
-});
-/** @deprecated See {@link updateFloorRequestSchema}. */
-export type UpdateFloorRequest = z.infer<typeof updateFloorRequestSchema>;
-
-/**
- * `POST /api/floors/:id/move` request.
- *
- * @deprecated Floors are replaced by checklists (F1); removed with the floor
- * routes.
- */
-export const moveFloorRequestSchema = z.object({
-  beforeId: idSchema.optional(),
-  afterId: idSchema.optional(),
-});
-/** @deprecated See {@link moveFloorRequestSchema}. */
-export type MoveFloorRequest = z.infer<typeof moveFloorRequestSchema>;
-
 /** `POST /api/notifications/read` request. */
 export const readNotificationsRequestSchema = z.object({
   ids: z.array(idSchema).optional(),
@@ -635,16 +609,6 @@ export const notificationListResponseSchema = z.object({
 export type NotificationListResponse = z.infer<
   typeof notificationListResponseSchema
 >;
-
-/**
- * `POST /api/quests/:id/floors` response (the quest's floors).
- *
- * @deprecated Floors are replaced by checklists (F1); removed with the floor
- * routes.
- */
-export const floorListResponseSchema = z.array(floorSchema);
-/** @deprecated See {@link floorListResponseSchema}. */
-export type FloorListResponse = z.infer<typeof floorListResponseSchema>;
 
 /** `GET /api/me/nominations` response (my pending nominations). */
 export const myNominationsResponseSchema = z.array(myNominationSchema);

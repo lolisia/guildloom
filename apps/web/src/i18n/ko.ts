@@ -51,7 +51,18 @@ const notificationTemplates = {
   retry_requested: (actor: string, quest: string): string =>
     `${actor}님이 ${quest}의 재도전을 요청했습니다.`,
   quest_cleared: (quest: string): string => `${quest}를 클리어했습니다.`,
+  clear_revoked: (actor: string, quest: string, xpRevoked: number): string =>
+    `${actor}님이 ${quest}의 클리어를 취소했습니다. (XP ${xpRevoked.toLocaleString("ko-KR")} 회수)`,
 };
+
+/** XP taken back by a `clear_revoked` notification payload. */
+function revokedXp(payload: unknown): number {
+  if (typeof payload !== "object" || payload === null) {
+    return 0;
+  }
+  const value = (payload as { xpRevoked?: unknown }).xpRevoked;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
 
 /** Render a notification row (and its toast) as one Korean sentence. */
 function formatNotification(notification: Notification): string {
@@ -75,6 +86,12 @@ function formatNotification(notification: Notification): string {
       return notificationTemplates.retry_requested(actor, quest);
     case "quest_cleared":
       return notificationTemplates.quest_cleared(quest);
+    case "clear_revoked":
+      return notificationTemplates.clear_revoked(
+        actor,
+        quest,
+        revokedXp(notification.payload),
+      );
   }
 }
 
@@ -277,29 +294,28 @@ export const ko = {
       floorRatio: (done: number, total: number): string => `${done}/${total}`,
       progressPercent: (percent: number): string => `${percent}%`,
       history: "모험 기록",
+      keyEventsEmpty: "아직 큰 사건은 없습니다",
+      showAllHistory: (count: number): string => `전체 기록 보기 (${count})`,
       archive: "의뢰 내리기",
       archiveConfirm: "이 의뢰를 내릴까요?",
       archived: "의뢰를 내렸습니다.",
       archiveFailed: "의뢰를 내리지 못했습니다.",
-      emptySituation: "현재 상황이 아직 없습니다.",
-      emptyDirection: "수정 방향이 아직 없습니다.",
-      emptyHistory: "모험 기록이 아직 없습니다.",
-      floors: {
-        title: "던전 층",
-        empty: "아직 층이 없습니다.",
+      refs: {
+        title: "참고 문서",
+        empty: "아직 참고 문서가 없습니다.",
+        placeholder: "문서 URL 또는 경로",
+        addLabel: "참고 문서 추가",
+        copyPath: "경로 복사",
+        remove: (target: string): string => `참고 문서 삭제: ${target}`,
+        addFailed: "참고 문서를 추가하지 못했습니다.",
+        removeFailed: "참고 문서를 삭제하지 못했습니다.",
+      },
+      checklist: {
+        addLabel: "층 추가",
         addPlaceholder: "층 제목을 입력하고 Enter",
-        add: "층 추가",
-        adding: "추가하는 중…",
-        check: (title: string): string => `${title} 완료`,
-        titleLabel: (title: string): string => `${title} 제목`,
-        delete: (title: string): string => `${title} 삭제`,
-        moveUp: (title: string): string => `${title} 위로 이동`,
-        moveDown: (title: string): string => `${title} 아래로 이동`,
-        drag: (title: string): string => `${title} 순서 변경`,
         addFailed: "층을 추가하지 못했습니다.",
-        saveFailed: "층을 저장하지 못했습니다.",
-        deleteFailed: "층을 삭제하지 못했습니다.",
-        moveFailed: "층 순서를 바꾸지 못했습니다.",
+        toggleFailed: "층을 저장하지 못했습니다.",
+        conflict: "다른 사람이 먼저 바꿨습니다. 다시 확인해 주세요",
       },
       bossBattle: {
         waiting: "보스전 — 의뢰인의 확인을 기다리는 중",
@@ -332,6 +348,30 @@ export const ko = {
     number: "번호",
     titleLabel: "제목",
     titlePlaceholder: "무엇을 해결해야 하나요?",
+    kindLabel: "종류",
+    kinds: {
+      fix: "수정",
+      feature: "신규",
+    },
+    kindFields: {
+      fix: {
+        situation: "현재 상황",
+        direction: "수정 방향",
+        situationPlaceholder: "어디서 무엇이 어떻게 보이는지",
+        directionPlaceholder:
+          "어떻게 바뀌어야 하는지 (- [ ] 로 시작하는 줄은 층)",
+        emptySituation: "현재 상황이 아직 없습니다.",
+        emptyDirection: "수정 방향이 아직 없습니다.",
+      },
+      feature: {
+        situation: "요약",
+        direction: "구현 내용",
+        situationPlaceholder: "한두 줄 요약",
+        directionPlaceholder: "구현할 내용 (- [ ] 로 시작하는 줄은 층)",
+        emptySituation: "요약이 아직 없습니다.",
+        emptyDirection: "구현 내용이 아직 없습니다.",
+      },
+    },
     situation: "현재 상황",
     situationPlaceholder: "지금 어떤 상황인가요?",
     direction: "수정 방향",

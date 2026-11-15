@@ -180,7 +180,6 @@ export function BossBanner({
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Button
           variant="primary"
-          icon="cleared"
           disabled={clearPending}
           onClick={onClear}
         >
@@ -190,7 +189,6 @@ export function BossBanner({
         </Button>
         <Button
           variant="secondary"
-          icon="refresh"
           disabled={clearPending}
           onClick={() => setRetryOpen(true)}
         >
