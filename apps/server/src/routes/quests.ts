@@ -17,6 +17,7 @@ import {
   STAGES,
   archiveQuestRequestSchema,
   bulkCreateQuestsRequestSchema,
+  clearQuestResponseSchema,
   computeBounty,
   createQuestRequestSchema,
   listQuestsQuerySchema,
@@ -24,6 +25,7 @@ import {
   questEventsResponseSchema,
   questListResponseSchema,
   questSchema,
+  retryQuestRequestSchema,
   updateQuestRequestSchema,
   type ArchiveQuestRequest,
   type BulkCreateQuestsRequest,
@@ -39,6 +41,7 @@ import {
   type QuestEvent,
   type QuestEventType,
   type QuestSummary,
+  type RetryQuestRequest,
   type Stage,
   type UpdateQuestRequest,
   type UserRef,
@@ -75,7 +78,15 @@ import {
 } from "../db/schema.js";
 import { authenticate, requireMembership } from "../lib/auth.js";
 import { HttpError } from "../lib/errors.js";
-import { bottomOrderKey, insertQuestEvent } from "../lib/party.js";
+import {
+  bottomOrderKey,
+  createNotification,
+  getActivePartyMembers,
+  insertQuestEvent,
+  type CreatedNotification,
+} from "../lib/party.js";
+import type { Realtime, XpChangedInput } from "../lib/realtime.js";
+import { settleClear, type ClearSettlement } from "../lib/settlement.js";
 
 /** Numeric route parameters (`:pid`, `:id`). */
 const projectParamsSchema = z.object({
@@ -176,6 +187,50 @@ function sameNameSet(left: string[], right: string[]): boolean {
 /** Next `updated_at` value, guaranteed to move forward even in the same ms. */
 function nextUpdatedAt(previous: number): number {
   return Math.max(Date.now(), previous + 1);
+}
+
+/** Stages a clear may start from; every other stage conflicts. */
+const CLEARABLE_STAGES: readonly Stage[] = ["board", "dungeon", "boss"];
+
+/** Emit the realtime work a committed clear settlement produced. */
+function emitSettlement(
+  realtime: Realtime,
+  projectId: number,
+  questId: number,
+  settlement: ClearSettlement,
+): void {
+  realtime.emitQuestChanged(projectId, questId);
+
+  for (const change of settlement.xpChanges) {
+    const input: XpChangedInput = {
+      userId: change.userId,
+      projectId,
+      xp: change.xp,
+      level: change.level,
+    };
+    if (change.levelUp) {
+      input.levelUp = change.levelUp;
+    }
+    realtime.emitXpChanged(input);
+  }
+
+  for (const created of settlement.notifications) {
+    realtime.emitNotification(created.userId, created.notification);
+  }
+
+  // The member list shows XP/level badges; refresh it even when every award
+  // was an idempotent no-op.
+  realtime.emitMembersChanged(projectId);
+}
+
+/** Emit collected notifications after their transaction committed. */
+function emitNotifications(
+  realtime: Realtime,
+  notifications: readonly CreatedNotification[],
+): void {
+  for (const created of notifications) {
+    realtime.emitNotification(created.userId, created.notification);
+  }
 }
 
 /** All tag names attached to each of `questIds`, sorted by name. */
@@ -965,20 +1020,28 @@ function neighborOrderKey(
   return neighbor.orderKey;
 }
 
-/** Result of a move: the reloaded quest and whether its stage changed. */
+/** Result of a move: the reloaded quest, its stage change and any settlement. */
 interface MoveQuestResult {
   quest: Quest;
   stageChanged: boolean;
+  /** Set when the move targeted `cleared` and ran the clear settlement. */
+  settlement: ClearSettlement | null;
 }
 
-/** Apply `POST /api/quests/:id/move`. */
+/**
+ * Apply `POST /api/quests/:id/move`.
+ *
+ * A manual move never runs the automatic stage machine. Dragging a card into
+ * `cleared` settles the clear (idempotently) at the computed neighbor order
+ * key; moving it back out keeps every award already paid.
+ */
 function moveQuest(
   db: AppDb,
   questId: number,
   actor: UserRow,
   body: MoveQuestRequest,
 ): MoveQuestResult {
-  const stageChanged = db.transaction((tx) => {
+  const outcome = db.transaction((tx) => {
     const quest = requireQuest(tx, questId, actor.id);
     const targetStage = body.stage;
 
@@ -1008,6 +1071,29 @@ function moveQuest(
         ? bottomOrderKey(tx, quest.projectId, targetStage)
         : generateKeyBetween(beforeKey, afterKey);
 
+    const now = Date.now();
+    const stageChanged = quest.stage !== targetStage;
+
+    if (stageChanged) {
+      insertQuestEvent(tx, {
+        questId: quest.id,
+        projectId: quest.projectId,
+        type: "quest_moved",
+        payload: { from: quest.stage, to: targetStage },
+        actorUserId: actor.id,
+        createdAt: now,
+      });
+    }
+
+    if (targetStage === "cleared") {
+      // `settleClear` writes the stage/order key together with the ledger,
+      // event and inbox rows, all inside this transaction.
+      return {
+        stageChanged,
+        settlement: settleClear(tx, quest, actor, now, orderKey),
+      };
+    }
+
     tx.update(quests)
       .set({
         stage: targetStage,
@@ -1017,21 +1103,130 @@ function moveQuest(
       .where(eq(quests.id, quest.id))
       .run();
 
-    if (quest.stage !== targetStage) {
-      insertQuestEvent(tx, {
-        questId: quest.id,
-        projectId: quest.projectId,
-        type: "quest_moved",
-        payload: { from: quest.stage, to: targetStage },
-        actorUserId: actor.id,
-        createdAt: Date.now(),
-      });
-    }
-
-    return quest.stage !== targetStage;
+    return { stageChanged, settlement: null };
   });
 
-  return { quest: loadQuestView(db, questId), stageChanged };
+  return { quest: loadQuestView(db, questId), ...outcome };
+}
+
+/** Realtime work produced by a retry after its transaction committed. */
+interface RetryQuestResult {
+  projectId: number;
+  questId: number;
+  notifications: CreatedNotification[];
+}
+
+/**
+ * Apply `POST /api/quests/:id/clear`.
+ *
+ * Any guild member may declare a clear of a quest that is still on the board,
+ * in the dungeon or at the boss. The card is appended to the cleared column
+ * and the settlement pays the party exactly once.
+ */
+function clearQuest(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  now: number,
+): { questId: number; projectId: number; settlement: ClearSettlement } {
+  return db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    if (!CLEARABLE_STAGES.includes(quest.stage)) {
+      throw new HttpError(
+        409,
+        "CONFLICT",
+        `Quest in stage '${quest.stage}' cannot be cleared`,
+      );
+    }
+
+    const orderKey = bottomOrderKey(tx, quest.projectId, "cleared");
+    return {
+      questId: quest.id,
+      projectId: quest.projectId,
+      settlement: settleClear(tx, quest, actor, now, orderKey),
+    };
+  });
+}
+
+/**
+ * Apply `POST /api/quests/:id/retry` (재도전).
+ *
+ * Only a boss quest may be retried: it drops to the bottom of the dungeon and
+ * every member that had finished goes back to fighting. The status reset is a
+ * side effect of the retry, so it deliberately writes no
+ * `member_status_changed` events; the requester comment is the event instead.
+ */
+function retryQuest(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  body: RetryQuestRequest,
+  now: number,
+): RetryQuestResult {
+  return db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    if (quest.stage !== "boss") {
+      throw new HttpError(
+        409,
+        "CONFLICT",
+        `Only a quest in stage 'boss' can be retried (current: '${quest.stage}')`,
+      );
+    }
+
+    const activeMembers = getActivePartyMembers(tx, quest.id);
+
+    tx.update(partyMembers)
+      .set({ status: "fighting", updatedAt: now })
+      .where(
+        and(
+          eq(partyMembers.questId, quest.id),
+          eq(partyMembers.status, "done"),
+        ),
+      )
+      .run();
+
+    tx.update(quests)
+      .set({
+        stage: "dungeon",
+        orderKey: bottomOrderKey(tx, quest.projectId, "dungeon"),
+        updatedAt: nextUpdatedAt(quest.updatedAt),
+      })
+      .where(eq(quests.id, quest.id))
+      .run();
+
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "quest_moved",
+      payload: { from: "boss", to: "dungeon" },
+      actorUserId: actor.id,
+      createdAt: now,
+    });
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "retry_requested",
+      payload: { comment: body.comment },
+      actorUserId: actor.id,
+      createdAt: now,
+    });
+
+    const notifications = activeMembers
+      .filter((member) => member.userId !== actor.id)
+      .map((member) =>
+        createNotification(tx, {
+          userId: member.userId,
+          projectId: quest.projectId,
+          questId: quest.id,
+          type: "retry_requested",
+          actorUserId: actor.id,
+          payload: { comment: body.comment },
+          createdAt: now,
+        }),
+      );
+
+    return { projectId: quest.projectId, questId: quest.id, notifications };
+  });
 }
 
 /** Apply `POST /api/quests/:id/archive`. */
@@ -1221,16 +1416,84 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      const { quest, stageChanged } = moveQuest(
+      const { quest, stageChanged, settlement } = moveQuest(
         request.server.db,
         request.params.id,
         user,
         request.body,
       );
-      if (stageChanged) {
+      if (settlement) {
+        emitSettlement(
+          request.server.realtime,
+          quest.projectId,
+          quest.id,
+          settlement,
+        );
+      } else if (stageChanged) {
         request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
       }
       return quest;
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/clear",
+    {
+      schema: {
+        params: questParamsSchema,
+        response: { 200: clearQuestResponseSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const db = request.server.db;
+      const result = clearQuest(db, request.params.id, user, Date.now());
+
+      emitSettlement(
+        request.server.realtime,
+        result.projectId,
+        result.questId,
+        result.settlement,
+      );
+
+      return {
+        quest: loadQuestView(db, result.questId),
+        rewards: result.settlement.rewards,
+        levelUps: result.settlement.levelUps,
+      };
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/retry",
+    {
+      schema: {
+        params: questParamsSchema,
+        body: retryQuestRequestSchema,
+        response: { 200: questSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const db = request.server.db;
+      const result = retryQuest(
+        db,
+        request.params.id,
+        user,
+        request.body,
+        Date.now(),
+      );
+
+      request.server.realtime.emitQuestChanged(
+        result.projectId,
+        result.questId,
+      );
+      emitNotifications(request.server.realtime, result.notifications);
+      request.server.realtime.emitMembersChanged(result.projectId);
+
+      return loadQuestView(db, result.questId);
     },
   );
 
