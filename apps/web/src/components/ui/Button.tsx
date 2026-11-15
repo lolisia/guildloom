@@ -4,26 +4,28 @@
  * Variants follow DESIGN.md: `primary` is the ink button (the only primary
  * action colour), `secondary` is a bordered paper button, `danger` marks
  * destructive actions in brick, and `ghost` is a borderless button for dense
- * toolbars. Buttons are 32px tall with 2px corners and a 1.5px border.
+ * toolbars. The default button is 28px tall with 2px corners and a 1.5px
+ * border; the small size is 24px.
  *
- * Icons sit on the left at their native 32px size with a 6px gap; the small
- * size omits the icon.
+ * Buttons carry text only. The `icon` prop remains for compatibility with
+ * older call sites, but no icon is rendered: the design keeps icons out of
+ * buttons so the dense bars stay legible.
  */
 import type { ButtonHTMLAttributes } from "react";
 
 import type { IconName } from "../../lib/icons";
-import Icon from "../Icon";
 
 /** Button emphasis. */
 export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 
-/** Button size. `md` is the default 32px button. */
+/** Button size. `md` is the default 28px button. */
 export type ButtonSize = "sm" | "md";
 
 /** Props for {@link Button}. */
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /** Compatibility-only; accepted but never rendered. */
   icon?: IconName;
 }
 
@@ -35,15 +37,15 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  md: "h-8 gap-1.5 px-3 text-sm",
-  sm: "h-6 gap-1.5 px-2 text-xs",
+  md: "h-7 px-2.5 text-[13px]",
+  sm: "h-6 px-2 text-xs",
 };
 
 /** Standard guildloom button. Defaults to `type="button"`. */
 export function Button({
   variant = "secondary",
   size = "md",
-  icon,
+  icon: _icon,
   type = "button",
   className,
   children,
@@ -60,7 +62,6 @@ export function Button({
 
   return (
     <button type={type} className={classes} {...rest}>
-      {icon && size === "md" ? <Icon name={icon} size={32} /> : null}
       {children}
     </button>
   );

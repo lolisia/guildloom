@@ -333,7 +333,7 @@ describe("QuestDrawer design", () => {
 
     const partySprite = placeholder.querySelector('[data-user-id="7"]');
     expect(partySprite).not.toBeNull();
-    expect(partySprite).toHaveClass("h-10", "w-10");
+    expect(partySprite).toHaveClass("h-7", "w-7");
     expect(partySprite).toHaveAttribute("data-state", "attack");
   });
 
@@ -371,10 +371,8 @@ describe("QuestDrawer design", () => {
     expect(fix).toHaveAttribute("aria-pressed", "true");
     expect(feature).toHaveAttribute("aria-pressed", "false");
 
-    expect(
-      within(dialog).queryByRole("combobox", { name: ko.quest.rank }),
-    ).toBeNull();
     expect(dialog.querySelector("[data-rank]")).toBeNull();
+    expect(dialog.textContent).not.toContain("등급");
   });
 
   it("styles the title and situation with atoms and sentence-case labels", async () => {

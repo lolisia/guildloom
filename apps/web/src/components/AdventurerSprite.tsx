@@ -8,7 +8,8 @@
  * `data-state` so styling/tests do not depend on the render shape.
  *
  * Shape follows DESIGN.md: 2px corners (never a circle), a 1.5px `line-strong`
- * outline, a light initial and no shadow. Backgrounds come from the mid-tones
+ * outline, a light initial and no shadow. Sizes are 24px (sm), 28px (md) and
+ * 56px (lg). Backgrounds come from the mid-tones
  * of the JRPG icon palette so avatars sit in the same world as the quest icons;
  * each one is checked against the initial colour for WCAG AA (4.5:1) in both
  * themes by `test/sprite.test.tsx`.
@@ -29,8 +30,8 @@ export interface AdventurerSpriteProps {
 }
 
 const SIZE_CLASSES: Record<AdventurerSpriteSize, string> = {
-  sm: "h-8 w-8 text-sm",
-  md: "h-10 w-10 text-base",
+  sm: "h-6 w-6 text-xs",
+  md: "h-7 w-7 text-sm",
   lg: "h-14 w-14 text-xl",
 };
 

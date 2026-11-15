@@ -364,9 +364,7 @@ describe("GuildSettingsPage", () => {
     });
     expect(revokeButton.className).toContain("border-brick");
     expect(revokeButton.className).toContain("text-brick");
-    expect(revokeButton.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/dropped.png",
-    );
+    expect(revokeButton.querySelector("img")).toBeNull();
 
     await user.click(
       within(created).getByRole("button", { name: ko.settings.copyInvite }),
@@ -481,7 +479,7 @@ describe("GuildSettingsPage", () => {
     const ownerSprite = list.querySelector('[data-user-id="1"]');
     expect(ownerSprite).not.toBeNull();
     expect(ownerSprite).toHaveTextContent("김");
-    expect((ownerSprite as HTMLElement).className).toContain("h-8");
+    expect((ownerSprite as HTMLElement).className).toContain("h-6");
     expect(list.querySelector('[data-user-id="2"]')).toHaveTextContent("아");
   });
 });

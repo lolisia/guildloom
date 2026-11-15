@@ -2,9 +2,10 @@
 /**
  * Board design-system tests.
  *
- * These prove the T05 restyle against DESIGN.md: sunken columns with stage
- * underlines, the paper quest card, the dashed quick-add slip, the drag-only
- * hard shadow and the responsive four-column grid.
+ * These prove the compact board restyle against DESIGN.md: sunken columns with
+ * stage underlines, the paper quest card at its 28px-control density, the
+ * dashed quick-add slip, the drag-only hard shadow, the icon-free card body and
+ * the responsive four-column grid with a 12px gap.
  *
  * The suite runs without a real browser, so `@dnd-kit/sortable`'s `useSortable`
  * is mocked. That lets the drag state be switched on for one card and proves
@@ -320,14 +321,17 @@ describe("board design", () => {
       const heading = within(column).getByRole("heading", {
         name: ko.board.columns[stage],
       });
-      expect(heading).toHaveClass("font-pixel", "text-[16px]");
+      expect(heading).toHaveClass("font-pixel", "text-[12px]");
 
       const count = within(column).getByText(ko.board.questCount(1));
       expect(count).toHaveClass("font-pixel", "text-[12px]", "text-muted");
+
+      const cardList = column.querySelector("div.flex.flex-1.flex-col");
+      expect(cardList).toHaveClass("gap-2");
     }
   });
 
-  it("lays the four columns out with a 20px gap: 1 / 2x2 / 4", async () => {
+  it("lays the four columns out with a 12px gap: 1 / 2x2 / 4", async () => {
     stubFetch(boardHandler());
     const { container } = renderBoard();
 
@@ -336,7 +340,7 @@ describe("board design", () => {
     expect(grid).toHaveClass(
       "grid",
       "grid-cols-1",
-      "gap-5",
+      "gap-3",
       "md:grid-cols-2",
       "xl:grid-cols-4",
     );
@@ -361,7 +365,7 @@ describe("board design", () => {
     }
   });
 
-  it("renders quest cards as paper sheets with badge, chips and meta", async () => {
+  it("renders quest cards as compact paper sheets with chips and meta", async () => {
     stubFetch(boardHandler());
     const { container } = renderBoard();
 
@@ -375,8 +379,9 @@ describe("board design", () => {
       "border-[1.5px]",
       "border-line-strong",
       "rounded-sm",
-      "px-[14px]",
-      "py-3",
+      "gap-1",
+      "px-2.5",
+      "py-2",
     );
     expect(card).toHaveAttribute("role", "button");
     expect(card).toHaveAttribute("tabindex", "0");
@@ -389,14 +394,14 @@ describe("board design", () => {
       "text-muted",
     );
 
-    const rank = card.querySelector('[data-rank="B"]');
-    expect(rank).not.toBeNull();
-    expect(rank).toHaveTextContent("B");
-    expect(rank?.querySelector("img")).toHaveAttribute("width", "32");
+    // The rank insignia is gone; a fix request has no kind chip either.
+    expect(card.querySelector("[data-rank]")).toBeNull();
+    expect(card.querySelector("[data-kind]")).toBeNull();
+    expect(within(card).queryByText("등급", { exact: false })).toBeNull();
 
     expect(
       within(card).getByRole("heading", { name: "보드 첫 의뢰" }),
-    ).toHaveClass("text-[15px]", "font-semibold");
+    ).toHaveClass("text-[14px]", "font-semibold");
 
     expect(within(card).getByText("긴급")).toHaveClass(
       "border",
@@ -420,14 +425,37 @@ describe("board design", () => {
       "border-[1.5px]",
     );
 
-    // Other stages keep the creator avatar at the sm (32px) size.
+    // Other stages keep the creator avatar at the sm (24px) size.
     const clearedCard = container.querySelector(
       '[data-quest-id="4"]',
     ) as HTMLElement;
     expect(clearedCard.querySelector('[data-user-id="1"]')).toHaveClass(
-      "h-8",
-      "w-8",
+      "h-6",
+      "w-6",
     );
+
+    // The icon-free card proves the meta rows have no <img> elements.
+    expect(card.querySelector("img")).toBeNull();
+  });
+
+  it("marks only feature requests with the 신규 text chip", async () => {
+    stubFetch(boardHandler());
+    const { container } = renderBoard();
+
+    await screen.findByText("보드 첫 의뢰");
+
+    const featureCard = container.querySelector(
+      '[data-quest-id="2"]',
+    ) as HTMLElement;
+    const featureChip = featureCard.querySelector('[data-kind="feature"]');
+    expect(featureChip).toHaveTextContent(ko.quest.kinds.feature);
+    expect(featureChip).toHaveClass("border", "border-line", "text-[12px]");
+
+    const fixCard = container.querySelector(
+      '[data-quest-id="1"]',
+    ) as HTMLElement;
+    expect(fixCard.querySelector("[data-kind]")).toBeNull();
+    expect(within(fixCard).queryByText(ko.quest.kinds.feature)).toBeNull();
   });
 
   it("keeps every resting card flat", async () => {

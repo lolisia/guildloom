@@ -1,14 +1,13 @@
 /**
  * Active party strip for a board card.
  *
- * Each member is a 32px {@link AdventurerSprite} inside a status-coloured
+ * Each member is a 24px {@link AdventurerSprite} inside a status-coloured
  * 1.5px ring: `joined` = line, `fighting` = teal and `done` = gold (DESIGN.md's
  * information/clear palette). The ring sits around the sprite's own ink
- * outline, so the avatar keeps the square 24/32px shape from DESIGN.md.
+ * outline, so the avatar keeps the square 24/28px shape from DESIGN.md.
  *
- * The leader is marked with the pack's `party` icon plus the visible 파티장
- * label, and every member carries a screen-reader-only status label so the
- * state never depends on colour alone.
+ * The leader is marked with the visible 파티장 label, and every member carries a
+ * screen-reader-only status label so the state never depends on colour alone.
  *
  * `retreated` members never appear on a card summary (the server sends only
  * the active party), but the status map is total over `PartySummary` anyway.
@@ -17,7 +16,6 @@ import type { MemberStatus, PartySummary } from "@guildloom/shared";
 
 import { ko } from "../../i18n/ko";
 import AdventurerSprite from "../AdventurerSprite";
-import Icon from "../Icon";
 
 /** Ring colour per clear status. */
 const STATUS_BORDER: Record<MemberStatus, string> = {
@@ -65,8 +63,7 @@ export function PartyAvatarRow({ party }: PartyAvatarRowProps) {
             {ko.quest.memberStatuses[member.status]}
           </span>
           {member.role === "leader" ? (
-            <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-ink">
-              <Icon name="party" size={32} />
+            <span className="inline-flex items-center text-[12px] font-medium text-ink">
               {ko.quest.partyLeader}
             </span>
           ) : null}

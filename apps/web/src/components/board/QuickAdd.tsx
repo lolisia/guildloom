@@ -134,7 +134,7 @@ export function QuickAdd({ projectId, inputRef }: QuickAddProps) {
           maxLength={200}
           aria-label={ko.board.newQuest}
           placeholder={ko.board.quickAddPlaceholder}
-          className="border-dashed px-2.5 py-2 text-[13px]"
+          className="border-dashed"
         />
         {createMutation.isError ? (
           <p role="alert" className="mt-1 text-[12px] text-brick">

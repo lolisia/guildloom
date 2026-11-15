@@ -107,9 +107,19 @@ export default function BoardPage() {
         );
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _error, { plan }) => {
+      // A move rewrites the quest's stage and order and writes a
+      // `quest_moved` event, so an open drawer of the dragged quest is stale
+      // until its detail and timeline refetch.
+      const questId = plan.questId;
       void queryClient.invalidateQueries({
         queryKey: ["quests", projectId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.quest(questId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.events(questId),
       });
     },
   });
@@ -247,10 +257,7 @@ export default function BoardPage() {
           <p role="alert" className="text-[13px] text-brick">
             {ko.board.loadFailed}
           </p>
-          <Button
-            icon="refresh"
-            onClick={() => void questsQuery.refetch()}
-          >
+          <Button onClick={() => void questsQuery.refetch()}>
             {ko.common.retry}
           </Button>
         </Panel>
@@ -266,7 +273,7 @@ export default function BoardPage() {
       >
         <div
           data-testid="board-grid"
-          className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+          className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
         >
           {BOARD_COLUMNS.map((stage) => (
             <BoardColumn

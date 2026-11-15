@@ -2,12 +2,12 @@
  * A single draggable quest card: a paper request sheet pinned to the board.
  *
  * The whole card is the drag activator (pointer/touch sensors) and also opens
- * the quest drawer when clicked. Beyond the M1 number, rank, title and tags it
- * shows the M2a live board data: the active party (leader first, with status
- * rings), floor progress, the growing bounty and any pending nominations.
- * Dusty unclaimed quests are desaturated and carry the pack's `faded` icon,
- * while a pending nomination for the signed-in adventurer emphasises the card
- * outline in teal.
+ * the quest drawer when clicked. Beyond the number, title and tags it shows the
+ * M2a live board data: the active party (leader first, with status rings),
+ * floor progress, the growing bounty and any pending nominations. A feature
+ * request ("신규") carries a small border chip; dusty unclaimed quests are
+ * desaturated and announce that state to assistive tech. A pending nomination
+ * for the signed-in adventurer emphasises the card outline in teal.
  *
  * Only the card being dragged is lifted off the wall: DESIGN.md's hard
  * `4px 4px 0 ink` shadow plus a `translate(-2px, -2px)` paper-lift. Resting
@@ -24,8 +24,6 @@ import { ko } from "../../i18n/ko";
 import { formatKoreanDate, relativeTime } from "../../lib/format";
 import { queryKeys } from "../../lib/queryKeys";
 import AdventurerSprite from "../AdventurerSprite";
-import Icon from "../Icon";
-import RankBadge from "../RankBadge";
 import { Chip } from "../ui";
 import PartyAvatarRow from "./PartyAvatarRow";
 
@@ -113,7 +111,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
   }
 
   const cardClasses = [
-    "flex cursor-grab touch-none select-none flex-col gap-2 rounded-sm border-[1.5px] bg-paper px-[14px] py-3 text-left transition-colors",
+    "flex cursor-grab touch-none select-none flex-col gap-1 rounded-sm border-[1.5px] bg-paper px-2.5 py-2 text-left transition-colors",
     hasMyNomination ? "border-teal" : "border-line-strong",
     dusty ? "saturate-50" : "",
     isDragging ? "relative cursor-grabbing" : "",
@@ -138,19 +136,22 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
       onKeyDown={handleKeyDown}
       className={cardClasses}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1">
-          <span className="font-pixel text-[12px] text-muted">
-            #{quest.number}
-          </span>
-          {dusty ? (
-            <Icon name="faded" size={32} label={ko.quest.dusty} />
-          ) : null}
+      <div className="flex items-center gap-1.5">
+        <span className="font-pixel text-[12px] text-muted">
+          #{quest.number}
         </span>
-        <RankBadge rank={quest.rank} size={32} />
+        {quest.kind === "feature" ? (
+          <span
+            data-kind="feature"
+            className="inline-flex items-center rounded-sm border border-line px-1 text-[12px] leading-4 text-muted"
+          >
+            {ko.quest.kinds.feature}
+          </span>
+        ) : null}
+        {dusty ? <span className="sr-only">{ko.quest.dusty}</span> : null}
       </div>
 
-      <h3 className="text-[15px] font-semibold leading-snug text-ink">
+      <h3 className="text-[14px] font-semibold leading-snug text-ink">
         {quest.title}
       </h3>
 
@@ -166,9 +167,8 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
 
       <PartyAvatarRow party={quest.party} />
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
-          <Icon name="floor" size={32} />
           <span className="sr-only">{ko.quest.floors}</span>
           <span className="font-pixel text-[12px] text-ink">
             {quest.floors.done}/{quest.floors.total}
@@ -192,7 +192,6 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1">
-            <Icon name="bounty" size={32} />
             <span className="sr-only">{ko.quest.bounty}</span>
             <span className="font-pixel text-[12px] text-gold">
               {formatBounty(quest.bounty.total)}
@@ -210,7 +209,6 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
               data-pending-nominations={quest.pendingNominations}
               className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-0.5 text-xs text-muted"
             >
-              <Icon name="pending" size={32} />
               <span>
                 {ko.quest.pendingNominations}{" "}
                 <span className="font-pixel text-[12px] text-ink">
@@ -222,7 +220,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 pt-0.5">
+      <div className="flex items-center justify-between gap-2">
         <time
           dateTime={new Date(quest.createdAt).toISOString()}
           title={formatKoreanDate(quest.createdAt)}
@@ -233,7 +231,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
         {showEmptyParty ? (
           <span
             data-testid="empty-party"
-            className="inline-flex h-8 items-center rounded-sm border-[1.5px] border-dashed border-line-strong px-2 text-[12px] text-muted"
+            className="inline-flex h-6 items-center rounded-sm border-[1.5px] border-dashed border-line-strong px-2 text-[12px] text-muted"
           >
             {ko.quest.emptyParty}
           </span>

@@ -4,9 +4,9 @@
  * (sprite, name, level, XP bar, theme menu, logout).
  *
  * Styling follows DESIGN.md: a sticky paper bar over a 1.5px `line-strong`
- * rule, outlined ground-filled tabs for the current guild/view, 32px pack
- * icons with visible Korean labels, and a gold XP bar that is the only reward
- * accent in the shell.
+ * rule, outlined ground-filled tabs for the current guild/view, Korean labels
+ * (no tab icons), and a gold XP bar that is the only reward accent in the
+ * shell. The guild logo keeps the pack's 32px crest.
  */
 import { levelFromXp, levelProgress } from "@guildloom/shared";
 import type { MeResponse, Project, ProjectSummary } from "@guildloom/shared";
@@ -31,9 +31,9 @@ const MAX_GUILD_NAME_LENGTH = 40;
 
 /** Shared box for guild and view tabs; the active state adds the outline. */
 const TAB_BASE_CLASSES =
-  "inline-flex h-8 items-center rounded-sm text-sm transition-colors";
+  "inline-flex h-7 items-center rounded-sm text-[13px] transition-colors";
 const GUILD_TAB_CLASSES = `${TAB_BASE_CLASSES} max-w-44 px-2.5 font-medium`;
-const VIEW_TAB_CLASSES = `${TAB_BASE_CLASSES} gap-1.5 px-2.5`;
+const VIEW_TAB_CLASSES = `${TAB_BASE_CLASSES} px-2.5`;
 const ACTIVE_TAB_CLASSES =
   "border-[1.5px] border-line-strong bg-ground text-ink";
 const INACTIVE_TAB_CLASSES = "text-muted hover:bg-sunken hover:text-ink";
@@ -169,11 +169,12 @@ export function TabBar() {
 
   return (
     <header className="sticky top-0 z-30 border-b-[1.5px] border-line-strong bg-paper">
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
+      <div className="mx-auto flex h-11 w-full max-w-screen-2xl items-center gap-4 px-4">
         <Link
           to="/"
-          className="shrink-0 font-pixel text-[16px] leading-none text-ink"
+          className="flex shrink-0 items-center gap-2 font-pixel text-[16px] leading-none text-ink"
         >
+          <Icon name="guild" size={32} />
           {ko.common.appName}
         </Link>
 
@@ -220,7 +221,6 @@ export function TabBar() {
 
           <Button
             variant="secondary"
-            icon="add"
             aria-label={ko.tabs.createGuild}
             title={ko.tabs.createGuild}
             onClick={openCreateDialog}
@@ -239,7 +239,6 @@ export function TabBar() {
               aria-current={isBoard ? "page" : undefined}
               className={tabClasses(VIEW_TAB_CLASSES, isBoard)}
             >
-              <Icon name="board" size={32} />
               <span>{ko.tabs.board}</span>
             </Link>
             <Link
@@ -247,7 +246,6 @@ export function TabBar() {
               aria-current={isLedger ? "page" : undefined}
               className={tabClasses(VIEW_TAB_CLASSES, isLedger)}
             >
-              <Icon name="ledger" size={32} />
               <span>{ko.tabs.ledger}</span>
             </Link>
             <Link
@@ -255,7 +253,6 @@ export function TabBar() {
               aria-current={isSettings ? "page" : undefined}
               className={tabClasses(VIEW_TAB_CLASSES, isSettings)}
             >
-              <Icon name="settings" size={32} />
               <span>{ko.tabs.settings}</span>
             </Link>
           </nav>
@@ -271,7 +268,7 @@ export function TabBar() {
               />
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
-                  <span className="max-w-32 truncate text-sm font-medium text-ink">
+                  <span className="max-w-32 truncate text-[13px] font-medium text-ink">
                     {user.displayName}
                   </span>
                   <span className="font-pixel text-[12px] text-gold">
@@ -303,7 +300,6 @@ export function TabBar() {
           {user ? (
             <Button
               variant="ghost"
-              icon="logout"
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
             >

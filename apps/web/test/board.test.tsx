@@ -341,7 +341,15 @@ describe("BoardPage", () => {
     expect(screen.getByText("#1")).toBeInTheDocument();
     expect(screen.getByText("긴급")).toBeInTheDocument();
     expect(screen.getByText("버그")).toBeInTheDocument();
-    expect(container.querySelector('[data-rank="B"]')).toHaveTextContent("B");
+    // Ranks are retired from the UI; feature requests carry the 신규 chip.
+    expect(container.querySelector("[data-rank]")).toBeNull();
+    expect(screen.queryByText("등급", { exact: false })).toBeNull();
+    expect(
+      container.querySelector('[data-quest-id="2"] [data-kind="feature"]'),
+    ).toHaveTextContent(ko.quest.kinds.feature);
+    expect(
+      container.querySelector('[data-quest-id="1"] [data-kind]'),
+    ).toBeNull();
     expect(screen.getByText("3일 전")).toBeInTheDocument();
     expect(screen.getByText("던전 의뢰")).toBeInTheDocument();
     expect(screen.getByText("보스 의뢰")).toBeInTheDocument();
@@ -362,7 +370,7 @@ describe("BoardPage", () => {
     const clearedCard = container.querySelector('[data-quest-id="4"]');
     const creatorSprite = clearedCard?.querySelector('[data-user-id="1"]');
     expect(creatorSprite).not.toBeNull();
-    expect(creatorSprite).toHaveClass("h-8", "w-8");
+    expect(creatorSprite).toHaveClass("h-6", "w-6");
 
     const listCall = fetchMock.mock.calls.find(([input, init]) => {
       const url = new URL(String(input), "http://localhost");
@@ -489,7 +497,7 @@ describe("BoardPage", () => {
     );
     expect(partySprite).not.toBeNull();
     expect(partySprite).toHaveAttribute("data-state", "attack");
-    expect(partySprite).toHaveClass("h-10", "w-10");
+    expect(partySprite).toHaveClass("h-7", "w-7");
 
     const situation = within(dialog).getByTestId("quest-situation");
     expect(situation.querySelector(".whitespace-pre-wrap")).not.toBeNull();

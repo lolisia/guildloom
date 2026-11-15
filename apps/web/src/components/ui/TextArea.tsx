@@ -13,7 +13,7 @@ export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(
   function TextArea({ className, rows = 4, ...rest }, ref) {
     const classes = [
-      "w-full resize-y rounded-sm border-[1.5px] border-line-strong bg-paper px-2.5 py-1.5 text-sm leading-relaxed text-ink placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50",
+      "w-full resize-y rounded-sm border-[1.5px] border-line-strong bg-paper px-2 py-1.5 text-[13px] leading-relaxed text-ink placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50",
       className ?? "",
     ]
       .filter(Boolean)
