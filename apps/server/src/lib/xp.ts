@@ -94,3 +94,89 @@ export function awardXp(db: AppDb, input: AwardXpInput): AwardXpResult {
   }
   return result;
 }
+
+/** Input for {@link revokeXp}. */
+export interface RevokeXpInput {
+  /** Adventurer losing the XP. */
+  userId: number;
+  /** Guild the revoked award belonged to. */
+  projectId: number;
+  /** Quest that caused the original award, or `null`. */
+  questId: number | null;
+  /**
+   * Positive amount of the original award to take back. The ledger stores the
+   * matching negative offset, while `users.xp` is floored at zero.
+   */
+  amount: number;
+  /** Idempotency key of the award being reversed. */
+  originalIdemKey: string;
+  /** Timestamp stored on the revocation row (epoch ms). */
+  now: number;
+}
+
+/** Result of {@link revokeXp}. */
+export interface RevokeXpResult {
+  /** `false` when the reversal was already recorded and nothing changed. */
+  revoked: boolean;
+  /** XP actually removed from the user (never more than they had). */
+  amount: number;
+  /** The adventurer's total XP after the call. */
+  xp: number;
+  /** Level implied by {@link xp}; it may be lower than before the revocation. */
+  level: number;
+}
+
+/**
+ * Reverse an award exactly once per original idempotency key.
+ *
+ * The ledger row itself always stores `-amount`, so the award and its
+ * cancellation net to zero. `users.xp` is clamped at zero: if the adventurer
+ * already spent the XP, the recovered `amount` is smaller than the ledger
+ * offset. Levels are derived from the resulting XP, so a revocation may lower
+ * the level without producing a level-up effect.
+ */
+export function revokeXp(db: AppDb, input: RevokeXpInput): RevokeXpResult {
+  const user = db
+    .select()
+    .from(users)
+    .where(eq(users.id, input.userId))
+    .get();
+  if (!user) {
+    throw new HttpError(404, "NOT_FOUND", "User not found");
+  }
+
+  const amount = Math.max(0, input.amount);
+  const inserted = db
+    .insert(xpLedger)
+    .values({
+      userId: input.userId,
+      projectId: input.projectId,
+      questId: input.questId,
+      reason: "revoke",
+      amount: -amount,
+      idemKey: `revoke:${input.originalIdemKey}`,
+      createdAt: input.now,
+    })
+    .onConflictDoNothing({ target: xpLedger.idemKey })
+    .run();
+
+  if (inserted.changes === 0) {
+    // Already reversed: report the current totals without touching them again.
+    return {
+      revoked: false,
+      amount: 0,
+      xp: user.xp,
+      level: levelFromXp(user.xp),
+    };
+  }
+
+  const xp = Math.max(0, user.xp - amount);
+  db.update(users).set({ xp }).where(eq(users.id, input.userId)).run();
+
+  return {
+    revoked: true,
+    amount: user.xp - xp,
+    xp,
+    level: levelFromXp(xp),
+  };
+}

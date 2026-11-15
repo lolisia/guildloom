@@ -15,8 +15,11 @@ import { z } from "zod";
 import {
   QUEST_EDITABLE_FIELDS,
   STAGES,
+  appendChecklistItems,
+  appendChecklistRequestSchema,
   archiveQuestRequestSchema,
   bulkCreateQuestsRequestSchema,
+  clearPreviewResponseSchema,
   clearQuestResponseSchema,
   computeBounty,
   createQuestRefRequestSchema,
@@ -31,9 +34,13 @@ import {
   questSummarySchema,
   refKind,
   retryQuestRequestSchema,
+  setChecklistItem,
+  toggleChecklistRequestSchema,
   updateQuestRequestSchema,
+  type AppendChecklistRequest,
   type ArchiveQuestRequest,
   type BulkCreateQuestsRequest,
+  type ClearPreviewResponse,
   type CreateQuestRefRequest,
   type CreateQuestRequest,
   type ListQuestsQuery,
@@ -49,6 +56,7 @@ import {
   type QuestSummary,
   type RetryQuestRequest,
   type Stage,
+  type ToggleChecklistRequest,
   type UpdateQuestRequest,
   type UserRef,
 } from "@guildloom/shared";
@@ -92,7 +100,14 @@ import {
   type CreatedNotification,
 } from "../lib/party.js";
 import type { Realtime, XpChangedInput } from "../lib/realtime.js";
-import { settleClear, type ClearSettlement } from "../lib/settlement.js";
+import {
+  loadDisplayNames,
+  planClearRewards,
+  revokeClear,
+  settleClear,
+  type ClearRevocation,
+  type ClearSettlement,
+} from "../lib/settlement.js";
 
 /** Numeric route parameters (`:pid`, `:id`). */
 const projectParamsSchema = z.object({
@@ -100,6 +115,9 @@ const projectParamsSchema = z.object({
 });
 const questParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
+});
+const checklistToggleParamsSchema = questParamsSchema.extend({
+  index: z.coerce.number().int().min(0),
 });
 const refParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -240,6 +258,28 @@ function emitNotifications(
   for (const created of notifications) {
     realtime.emitNotification(created.userId, created.notification);
   }
+}
+
+/** Emit the realtime work a committed clear revocation produced. */
+function emitRevocation(
+  realtime: Realtime,
+  projectId: number,
+  questId: number,
+  revocation: ClearRevocation,
+): void {
+  realtime.emitQuestChanged(projectId, questId);
+
+  for (const change of revocation.xpChanges) {
+    realtime.emitXpChanged({
+      userId: change.userId,
+      projectId,
+      xp: change.xp,
+      level: change.level,
+    });
+  }
+
+  emitNotifications(realtime, revocation.notifications);
+  realtime.emitMembersChanged(projectId);
 }
 
 /** All tag names attached to each of `questIds`, sorted by name. */
@@ -1006,6 +1046,215 @@ function updateQuestDetails(
   return loadQuestDetail(db, questId);
 }
 
+/**
+ * Apply `POST /api/quests/:id/checklist/:index` (체크리스트 토글).
+ *
+ * The client sends the item text it saw; a stale index or text is a
+ * `CHECKLIST_CONFLICT` so a concurrent edit can never toggle the wrong line.
+ * Only the checkbox marker and `updated_at` change.
+ */
+function toggleChecklist(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  index: number,
+  body: ToggleChecklistRequest,
+): QuestDetail {
+  db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    const item = parseChecklist(quest.direction).items.find(
+      (entry) => entry.index === index,
+    );
+    if (!item) {
+      throw new HttpError(
+        409,
+        "CHECKLIST_CONFLICT",
+        `Checklist item ${index} does not exist`,
+      );
+    }
+    if (item.text !== body.text) {
+      throw new HttpError(
+        409,
+        "CHECKLIST_CONFLICT",
+        `Checklist item ${index} changed; reload the quest before toggling`,
+      );
+    }
+
+    const direction = setChecklistItem(quest.direction, index, body.done);
+    const now = Date.now();
+    tx.update(quests)
+      .set({ direction, updatedAt: nextUpdatedAt(quest.updatedAt) })
+      .where(eq(quests.id, quest.id))
+      .run();
+
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "floor_checked",
+      payload: { text: item.text, done: body.done },
+      actorUserId: actor.id,
+      createdAt: now,
+    });
+  });
+
+  return loadQuestDetail(db, questId);
+}
+
+/**
+ * Apply `POST /api/quests/:id/checklist` (체크리스트 항목 추가).
+ *
+ * Blank titles are dropped; an all-blank request is a 400 and writes nothing.
+ * The appended lines reuse the document's line ending.
+ */
+function appendChecklist(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  body: AppendChecklistRequest,
+): QuestDetail {
+  const titles = body.titles
+    .map((title) => title.trim())
+    .filter((title) => title.length > 0);
+  if (titles.length === 0) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "At least one non-empty checklist title is required",
+    );
+  }
+
+  db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    const now = Date.now();
+
+    tx.update(quests)
+      .set({
+        direction: appendChecklistItems(quest.direction, titles),
+        updatedAt: nextUpdatedAt(quest.updatedAt),
+      })
+      .where(eq(quests.id, quest.id))
+      .run();
+
+    insertQuestEvent(tx, {
+      questId: quest.id,
+      projectId: quest.projectId,
+      type: "quest_edited",
+      payload: { fields: ["direction"] },
+      actorUserId: actor.id,
+      createdAt: now,
+    });
+  });
+
+  return loadQuestDetail(db, questId);
+}
+
+/**
+ * Apply `GET /api/quests/:id/clear-preview`.
+ *
+ * Uses the same pure calculation as {@link settleClear} and writes nothing:
+ * no ledger, event, notification or quest row is touched.
+ */
+function previewClear(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+): ClearPreviewResponse {
+  const quest = requireQuest(db, questId, actor.id);
+  if (!CLEARABLE_STAGES.includes(quest.stage)) {
+    throw new HttpError(
+      409,
+      "CONFLICT",
+      `Quest in stage '${quest.stage}' cannot be cleared`,
+    );
+  }
+
+  const activeMembers = getActivePartyMembers(db, quest.id);
+  const plan = planClearRewards(
+    quest,
+    activeMembers.map((member) => member.userId),
+    Date.now(),
+  );
+
+  const rewards = plan.shares.filter((share) => share.amount > 0);
+  const requesterBonus =
+    plan.requester !== null && plan.requester.amount > 0
+      ? plan.requester
+      : null;
+  const names = loadDisplayNames(db, [
+    ...new Set([
+      ...rewards.map((share) => share.userId),
+      ...(requesterBonus === null ? [] : [requesterBonus.userId]),
+    ]),
+  ]);
+  const toRef = (userId: number): UserRef => ({
+    id: userId,
+    displayName: names.get(userId) ?? "알 수 없는 모험가",
+  });
+
+  return {
+    total: plan.bounty.total,
+    rewards: rewards.map((share) => ({
+      user: toRef(share.userId),
+      amount: share.amount,
+    })),
+    requesterBonus:
+      requesterBonus === null
+        ? null
+        : {
+            user: toRef(requesterBonus.userId),
+            amount: requesterBonus.amount,
+          },
+    // A requester that also fights is involved; a bystander is not.
+    actorIsInvolved:
+      quest.createdBy === actor.id ||
+      activeMembers.some((member) => member.userId === actor.id),
+  };
+}
+
+/** Result of an unclear: the reloaded quest is fetched by the route. */
+interface UnclearQuestResult {
+  projectId: number;
+  questId: number;
+  revocation: ClearRevocation;
+}
+
+/**
+ * Apply `POST /api/quests/:id/unclear`.
+ *
+ * The card returns to the bottom of the boss column with its party statuses
+ * untouched, and the current round's clear awards are reversed. Only a
+ * cleared quest can be unclear-ed.
+ */
+function unclearQuest(
+  db: AppDb,
+  questId: number,
+  actor: UserRow,
+  now: number,
+): UnclearQuestResult {
+  return db.transaction((tx) => {
+    const quest = requireQuest(tx, questId, actor.id);
+    if (quest.stage !== "cleared") {
+      throw new HttpError(
+        409,
+        "NOT_CLEARED",
+        `Only a cleared quest can be unclear-ed (current: '${quest.stage}')`,
+      );
+    }
+
+    const revocation = revokeClear(tx, quest, actor, now);
+    tx.update(quests)
+      .set({
+        stage: "boss",
+        orderKey: bottomOrderKey(tx, quest.projectId, "boss"),
+        updatedAt: nextUpdatedAt(quest.updatedAt),
+      })
+      .where(eq(quests.id, quest.id))
+      .run();
+
+    return { projectId: quest.projectId, questId: quest.id, revocation };
+  });
+}
+
 /** Load the order key of a move target neighbor, validating project and stage. */
 function neighborOrderKey(
   db: AppDb,
@@ -1045,6 +1294,8 @@ interface MoveQuestResult {
   quest: QuestDetail;
   /** Set when the move targeted `cleared` and ran the clear settlement. */
   settlement: ClearSettlement | null;
+  /** Set when a cleared card left `cleared` and its round was revoked. */
+  revocation: ClearRevocation | null;
 }
 
 /**
@@ -1052,7 +1303,8 @@ interface MoveQuestResult {
  *
  * A manual move never runs the automatic stage machine. Dragging a card into
  * `cleared` settles the clear (idempotently) at the computed neighbor order
- * key; moving it back out keeps every award already paid.
+ * key. Dragging it back out revokes that clear round; reordering inside
+ * `cleared` never revokes.
  */
 function moveQuest(
   db: AppDb,
@@ -1107,8 +1359,16 @@ function moveQuest(
     if (targetStage === "cleared") {
       // `settleClear` writes the stage/order key together with the ledger,
       // event and inbox rows, all inside this transaction.
-      return { settlement: settleClear(tx, quest, actor, now, orderKey) };
+      return {
+        settlement: settleClear(tx, quest, actor, now, orderKey),
+        revocation: null,
+      };
     }
+
+    // Leaving `cleared` (including into another non-cleared column) revokes
+    // the current clear round; `quest_moved` above stays the first event.
+    const revocation =
+      quest.stage === "cleared" ? revokeClear(tx, quest, actor, now) : null;
 
     tx.update(quests)
       .set({
@@ -1119,7 +1379,7 @@ function moveQuest(
       .where(eq(quests.id, quest.id))
       .run();
 
-    return { settlement: null };
+    return { settlement: null, revocation };
   });
 
   return { quest: loadQuestDetail(db, questId), ...outcome };
@@ -1535,7 +1795,7 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const user = currentUser(request);
-      const { quest, settlement } = moveQuest(
+      const { quest, settlement, revocation } = moveQuest(
         request.server.db,
         request.params.id,
         user,
@@ -1549,6 +1809,15 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
           quest.projectId,
           quest.id,
           settlement,
+        );
+      } else if (revocation) {
+        // A move out of `cleared` also takes XP back, so the room needs the
+        // XP and inbox fan-out in addition to the quest refresh.
+        emitRevocation(
+          request.server.realtime,
+          quest.projectId,
+          quest.id,
+          revocation,
         );
       } else {
         // Every other move rewrites the card's stage and/or order key (a
@@ -1585,6 +1854,93 @@ export const questRoutes: FastifyPluginAsyncZod = async (app) => {
         rewards: result.settlement.rewards,
         levelUps: result.settlement.levelUps,
       };
+    },
+  );
+
+  app.get(
+    "/api/quests/:id/clear-preview",
+    {
+      schema: {
+        params: questParamsSchema,
+        response: { 200: clearPreviewResponseSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      return previewClear(request.server.db, request.params.id, user);
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/unclear",
+    {
+      schema: {
+        params: questParamsSchema,
+        response: { 200: questDetailResponseSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const db = request.server.db;
+      const result = unclearQuest(db, request.params.id, user, Date.now());
+
+      emitRevocation(
+        request.server.realtime,
+        result.projectId,
+        result.questId,
+        result.revocation,
+      );
+
+      return loadQuestDetail(db, result.questId);
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/checklist/:index",
+    {
+      schema: {
+        params: checklistToggleParamsSchema,
+        body: toggleChecklistRequestSchema,
+        response: { 200: questDetailResponseSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const quest = toggleChecklist(
+        request.server.db,
+        request.params.id,
+        user,
+        request.params.index,
+        request.body,
+      );
+      request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
+      return quest;
+    },
+  );
+
+  app.post(
+    "/api/quests/:id/checklist",
+    {
+      schema: {
+        params: questParamsSchema,
+        body: appendChecklistRequestSchema,
+        response: { 200: questDetailResponseSchema },
+      },
+      preHandler: authenticate,
+    },
+    async (request) => {
+      const user = currentUser(request);
+      const quest = appendChecklist(
+        request.server.db,
+        request.params.id,
+        user,
+        request.body,
+      );
+      request.server.realtime.emitQuestChanged(quest.projectId, quest.id);
+      return quest;
     },
   );
 
