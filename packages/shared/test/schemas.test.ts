@@ -49,6 +49,7 @@ const questDetail = {
   number: 12,
   title: "로그인 버그",
   stage: "dungeon",
+  kind: "fix",
   rank: "D",
   orderKey: "a0",
   tags: ["버그"],
@@ -89,6 +90,16 @@ const questDetail = {
     },
   ],
   floors: { done: 1, total: 2 },
+  refs: [
+    {
+      id: 3,
+      label: "설계 명세",
+      target: "https://example.com/spec",
+      kind: "url",
+      createdBy: { id: 7, displayName: "김철수" },
+      createdAt: 1_700_000_000_400,
+    },
+  ],
   bounty: {
     base: 40,
     multiplier: 1.2,
@@ -200,8 +211,9 @@ describe("stageSchema and rankSchema", () => {
 });
 
 describe("notification and XP constants", () => {
-  it("adds the clear_revoked notification type", () => {
+  it("adds clear_revoked as a first-class notification type", () => {
     expect(NOTIFICATION_TYPES).toContain("clear_revoked");
+    expect(notificationTypeSchema.options).toEqual([...NOTIFICATION_TYPES]);
   });
 
   it("adds the revoke XP reason while keeping the existing ones", () => {
@@ -255,6 +267,7 @@ describe("questSummarySchema", () => {
     number: 12,
     title: "로그인 버그",
     stage: "board",
+    kind: "fix",
     rank: null,
     orderKey: "a0",
     tags: ["버그"],
@@ -300,13 +313,16 @@ describe("questSummarySchema", () => {
     ]);
   });
 
-  it("parses a quest summary and fills the default kind", () => {
-    const parsed = questSummarySchema.parse(summary);
+  it("parses a quest summary with its required kind", () => {
+    expect(questSummarySchema.parse(summary)).toEqual(summary);
+  });
 
-    expect(parsed).toEqual({ ...summary, kind: "fix" });
-    expect(Object.keys(parsed).filter((key) => key !== "kind")).toEqual(
-      Object.keys(summary),
-    );
+  it("requires kind on every summary", () => {
+    const { kind: _kind, ...withoutKind } = summary;
+    expect(questSummarySchema.safeParse(withoutKind).success).toBe(false);
+    expect(
+      questSummarySchema.safeParse({ ...summary, kind: undefined }).success,
+    ).toBe(false);
   });
 
   it("accepts a rank and null", () => {
@@ -314,7 +330,7 @@ describe("questSummarySchema", () => {
     expect(questSummarySchema.parse({ ...summary, rank: null }).rank).toBeNull();
   });
 
-  it("accepts exactly the known quest kinds and defaults to fix", () => {
+  it("accepts exactly the known quest kinds", () => {
     expect(questKindSchema.options).toEqual([...QUEST_KINDS]);
     expect([...QUEST_KINDS]).toEqual(["fix", "feature"]);
     expect(questSummarySchema.parse(summary).kind).toBe("fix");
@@ -326,9 +342,7 @@ describe("questSummarySchema", () => {
     ).toBe(false);
   });
 
-  it("serializes a legacy summary that has no kind yet", () => {
-    // Fastify serializes responses with Zod's encode direction; the field is
-    // optional there until the server sends it (parse still fills "fix").
+  it("serializes the required kind in both directions", () => {
     expect(questSummarySchema.encode(summary)).toEqual(summary);
   });
 
@@ -343,7 +357,7 @@ describe("questSchema", () => {
   it("overrides the summary party with the detail shape", () => {
     const parsed = questSchema.parse(questDetail);
 
-    expect(parsed).toEqual({ ...questDetail, kind: "fix", refs: [] });
+    expect(parsed).toEqual(questDetail);
     // PartyMember carries the full user ref, not the summary's flat fields.
     expect(parsed.party[0]?.user.displayName).toBe("김철수");
     expect(parsed.party[1]?.retreatReason).toBe("담당자가 아님");
@@ -352,55 +366,51 @@ describe("questSchema", () => {
     expect(parsed.firstClaimedAt).toBe(1_700_000_000_000);
   });
 
-  /**
-   * The server's party routes still answer through this schema with the
-   * retired floor rows (`loadQuestView` returns an empty array), so the
-   * deprecated branch stays parseable until that wrapper is removed.
-   */
-  it("still accepts the deprecated floor rows the party routes emit", () => {
-    expect(questSchema.parse({ ...questDetail, floors: [] }).floors).toEqual(
-      [],
-    );
-
-    const withRows = questSchema.parse({
-      ...questDetail,
-      floors: [
-        {
-          id: 5,
-          title: "1층: 로그인 재현",
-          orderKey: "a0",
-          doneAt: null,
-          doneBy: null,
-        },
-      ],
-    });
-    expect(withRows.floors).toHaveLength(1);
-
+  it("accepts only the checklist { done, total } progress", () => {
     expect(
-      questSchema.safeParse({ ...questDetail, floors: [{ id: 5 }] }).success,
+      questSchema.parse({ ...questDetail, floors: { done: 0, total: 0 } })
+        .floors,
+    ).toEqual({ done: 0, total: 0 });
+
+    // The retired dungeon floor rows are rejected: an empty array no longer
+    // parses, and neither does a row array.
+    expect(
+      questSchema.safeParse({ ...questDetail, floors: [] }).success,
+    ).toBe(false);
+    expect(
+      questSchema.safeParse({
+        ...questDetail,
+        floors: [
+          {
+            id: 5,
+            title: "1층: 로그인 재현",
+            orderKey: "a0",
+            doneAt: null,
+            doneBy: null,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      questSchema.safeParse({ ...questDetail, floors: [{ done: 1, total: 2 }] })
+        .success,
     ).toBe(false);
   });
 
-  it("defaults kind and refs while accepting explicit values", () => {
-    expect(questSchema.parse(questDetail).kind).toBe("fix");
-    expect(questSchema.parse(questDetail).refs).toEqual([]);
+  it("requires kind and refs while accepting explicit values", () => {
+    const feature = questSchema.parse({ ...questDetail, kind: "feature" });
+    expect(feature.kind).toBe("feature");
+    expect(feature.refs).toEqual(questDetail.refs);
 
-    const ref = {
-      id: 3,
-      label: "설계 명세",
-      target: "https://example.com/spec",
-      kind: "url",
-      createdBy: { id: 7, displayName: "김철수" },
-      createdAt: 1_700_000_000_400,
-    };
-    const parsed = questSchema.parse({
-      ...questDetail,
-      kind: "feature",
-      refs: [ref],
-    });
+    const { kind: _kind, ...withoutKind } = questDetail;
+    expect(questSchema.safeParse(withoutKind).success).toBe(false);
 
-    expect(parsed.kind).toBe("feature");
-    expect(parsed.refs).toEqual([ref]);
+    const { refs: _refs, ...withoutRefs } = questDetail;
+    expect(questSchema.safeParse(withoutRefs).success).toBe(false);
+
+    expect(questSchema.parse({ ...questDetail, refs: [] }).refs).toEqual(
+      [],
+    );
   });
 
   it("requires firstClaimedAt and accepts null while unclaimed", () => {
@@ -413,7 +423,7 @@ describe("questSchema", () => {
     expect(questSchema.safeParse(withoutFirstClaim).success).toBe(false);
   });
 
-  it("serializes a legacy detail that has no kind or refs yet", () => {
+  it("serializes the F1 detail fields in both directions", () => {
     expect(questSchema.encode(questDetail)).toEqual(questDetail);
   });
 
@@ -614,7 +624,7 @@ describe("nomination and notification schemas", () => {
     expect(parsed.readAt).toBeNull();
   });
 
-  it("accepts the F1 clear_revoked notification at runtime", () => {
+  it("accepts the clear_revoked notification", () => {
     expect(notificationTypeSchema.parse("clear_revoked")).toBe("clear_revoked");
 
     const parsed = notificationSchema.parse({

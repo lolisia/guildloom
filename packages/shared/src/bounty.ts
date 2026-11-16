@@ -14,7 +14,6 @@ import {
   BOUNTY_CAP,
   BOUNTY_STEP,
   DUSTY_DAYS_AFTER_CAP,
-  type Rank,
 } from "./constants.js";
 
 /** Milliseconds in one day. */
@@ -29,12 +28,6 @@ export const DUSTY_AFTER_DAYS =
 
 /** Inputs for {@link computeBounty}. */
 export interface BountyInput {
-  /**
-   * @deprecated Ranks no longer change the bounty (every clear is worth
-   * {@link BASE_CLEAR_XP}). Still accepted, but ignored, so callers that pass
-   * the quest rank keep compiling until they are updated.
-   */
-  rank?: Rank | null;
   /** When the quest was posted (epoch ms). */
   createdAt: number;
   /** When the first party member joined; `null`/`undefined` while unclaimed. */

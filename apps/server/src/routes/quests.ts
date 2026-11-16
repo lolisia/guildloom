@@ -31,7 +31,6 @@ import {
   questListResponseSchema,
   questRefSchema,
   questSchema,
-  questSummarySchema,
   refKind,
   retryQuestRequestSchema,
   setChecklistItem,
@@ -436,24 +435,19 @@ interface QuestDetailExtras {
 /**
  * The quest detail exposed by the quest routes.
  *
- * The checklist progress replaces the deprecated floor rows: both the board
- * summary and the detail report `{ done, total }` parsed from `direction`.
+ * The shared `questSchema` already carries the F1 detail contract: `floors`
+ * is the checklist progress parsed from `direction`, and `kind`/`refs` are
+ * required fields.
  */
-export type QuestDetail = Omit<Quest, "floors"> & {
-  floors: { done: number; total: number };
-};
+export type QuestDetail = Quest;
 
 /**
- * Detail response schema of the quest routes.
+ * Detail response schema shared by every route that returns one quest.
  *
- * The shared `questSchema` still serializes the deprecated floor rows for the
- * not-yet-migrated web client (T04 removes them together with the floor
- * exports). This local override keeps the server contract on the checklist
- * progress without editing the shared package.
+ * `/api/quests/:id` and the party mutations serialize the same contract, so
+ * a party action can never drift from the quest detail.
  */
-const questDetailResponseSchema = questSchema.extend({
-  floors: questSummarySchema.shape.floors,
-});
+export const questDetailResponseSchema = questSchema;
 const questDetailListResponseSchema = z.array(questDetailResponseSchema);
 const clearQuestDetailResponseSchema = clearQuestResponseSchema.extend({
   quest: questDetailResponseSchema,
@@ -653,17 +647,6 @@ export function loadQuestDetail(db: AppDb, questId: number): QuestDetail {
     },
     Date.now(),
   );
-}
-
-/**
- * Compatibility detail view for routes that still serialize the shared
- * `questSchema` with its deprecated floor array (`routes/party.ts`). The floor
- * rows no longer exist, so the field is always empty; T04 removes it and this
- * wrapper together.
- */
-export function loadQuestView(db: AppDb, questId: number): Quest {
-  const detail = loadQuestDetail(db, questId);
-  return { ...detail, floors: [] };
 }
 
 /** Fetch an existing project tag or create it in the project. */

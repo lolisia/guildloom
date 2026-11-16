@@ -1061,6 +1061,66 @@ describe("quest read model", () => {
   });
 });
 
+describe("party mutation responses", () => {
+  it("returns the quest detail contract from join, status and leave", async () => {
+    const quest = await createQuest();
+    test.db
+      .update(quests)
+      .set({ direction: "- [x] 하나\n- [ ] 둘" })
+      .where(eq(quests.id, quest.id))
+      .run();
+
+    const joined = await joinQuest(quest.id, aliceCookie);
+    expect(joined.statusCode).toBe(200);
+    const joinedQuest = joined.json() as Quest;
+    expect(joinedQuest.floors).toEqual({ done: 1, total: 2 });
+    expect(joinedQuest.refs).toEqual([]);
+    expect(joinedQuest.kind).toBe("fix");
+
+    const status = await setStatus(quest.id, "fighting", aliceCookie);
+    expect(status.statusCode).toBe(200);
+    const statusQuest = status.json() as Quest;
+    expect(statusQuest.floors).toEqual({ done: 1, total: 2 });
+    expect(statusQuest.refs).toEqual([]);
+
+    const left = await leaveQuest(quest.id, {}, aliceCookie);
+    expect(left.statusCode).toBe(200);
+    const leftQuest = left.json() as Quest;
+    expect(leftQuest.floors).toEqual({ done: 1, total: 2 });
+    expect(leftQuest.kind).toBe("fix");
+  });
+
+  it("returns the quest detail contract from accept and pass", async () => {
+    const acceptTarget = await createQuest();
+    const acceptBatch = (
+      await nominate(acceptTarget.id, [alice.id], ownerCookie)
+    ).json() as { nominations: Nomination[] };
+    const accepted = await acceptNomination(
+      acceptBatch.nominations[0]!.id,
+      aliceCookie,
+    );
+    expect(accepted.statusCode).toBe(200);
+    const acceptedQuest = accepted.json() as Quest;
+    expect(acceptedQuest.floors).toEqual({ done: 0, total: 0 });
+    expect(acceptedQuest.refs).toEqual([]);
+    expect(acceptedQuest.kind).toBe("fix");
+
+    const passTarget = await createQuest("패스 의뢰");
+    const passBatch = (
+      await nominate(passTarget.id, [alice.id], ownerCookie)
+    ).json() as { nominations: Nomination[] };
+    const passed = await passNomination(
+      passBatch.nominations[0]!.id,
+      {},
+      aliceCookie,
+    );
+    expect(passed.statusCode).toBe(200);
+    const passedQuest = passed.json() as Quest;
+    expect(passedQuest.floors).toEqual({ done: 0, total: 0 });
+    expect(passedQuest.refs).toEqual([]);
+  });
+});
+
 describe("awardXp", () => {
   it("pays once, levels up and reports the crossing", async () => {
     const user = createUser(test.db, {

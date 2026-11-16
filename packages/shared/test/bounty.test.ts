@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   BASE_CLEAR_XP,
   BOUNTY_CAP,
   DUSTY_AFTER_DAYS,
   computeBounty,
+  type BountyInput,
 } from "../src/index.js";
 
 const DAY = 86_400_000;
@@ -28,17 +29,10 @@ describe("computeBounty", () => {
     });
   });
 
-  it("ignores a rank passed by legacy callers", () => {
-    const base = {
-      createdAt: CREATED_AT,
-      firstClaimedAt: null,
-      now: CREATED_AT + 3 * DAY,
-    };
-
-    expect(computeBounty({ ...base, rank: "S" }).total).toBe(64);
-    expect(computeBounty({ ...base, rank: "F" }).total).toBe(64);
-    expect(computeBounty({ ...base, rank: null }).total).toBe(64);
-    expect(computeBounty(base).total).toBe(64);
+  it("takes only the quest timestamps, never a rank", () => {
+    expectTypeOf<keyof BountyInput>().toEqualTypeOf<
+      "createdAt" | "firstClaimedAt" | "now"
+    >();
   });
 
   it("adds 20% per full day on the board", () => {

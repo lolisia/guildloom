@@ -14,6 +14,7 @@ import type {
   ClearQuestResponse,
   MeResponse,
   Notification,
+  NotificationType,
   ProjectDetailResponse,
   Quest,
 } from "@guildloom/shared";
@@ -183,16 +184,17 @@ function eventPayloads(questId: number, type: string): unknown[] {
     .map((event) => JSON.parse(event.payload) as unknown);
 }
 
-function notificationRows(userId: number, type?: string) {
+function notificationRows(userId: number, type?: NotificationType) {
+  const conditions = [eq(notifications.userId, userId)];
+  if (type !== undefined) {
+    conditions.push(eq(notifications.type, type));
+  }
   return test.db
     .select()
     .from(notifications)
-    .where(eq(notifications.userId, userId))
+    .where(and(...conditions))
     .orderBy(asc(notifications.id))
-    .all()
-    // `clear_revoked` is accepted at runtime by the shared enum but is not in
-    // the pre-F1 TypeScript union yet, so filter by value in memory.
-    .filter((row) => type === undefined || row.type === type);
+    .all();
 }
 
 function partyRow(questId: number, userId: number) {

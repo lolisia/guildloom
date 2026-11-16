@@ -17,7 +17,6 @@ import {
   QUEST_KINDS,
   RANKS,
   STAGES,
-  type AnyNotificationType,
 } from "./constants.js";
 
 /** Numeric primary key (SQLite autoincrement). */
@@ -279,16 +278,8 @@ export const nominationKindSchema = z.enum(NOMINATION_KINDS);
 /** Nomination lifecycle state. */
 export const nominationStateSchema = z.enum(NOMINATION_STATES);
 
-/**
- * In-app notification type.
- *
- * The runtime enum includes every value in {@link NOTIFICATION_TYPES}; the
- * output type is the full F1 union (`clear_revoked` included) so the web copy
- * switch can handle it exhaustively.
- */
-export const notificationTypeSchema = z.enum(
-  NOTIFICATION_TYPES,
-) as unknown as z.ZodType<AnyNotificationType, string>;
+/** In-app notification type. */
+export const notificationTypeSchema = z.enum(NOTIFICATION_TYPES);
 
 /** Bounty (현상금) shown on quest cards. */
 export const bountySchema = z.object({
@@ -333,25 +324,8 @@ export const nominationSchema = z.object({
 export type Nomination = z.infer<typeof nominationSchema>;
 
 /**
- * Deprecated dungeon floor row.
- *
- * Not exported: floors are replaced by the direction checklist (F1). The shape
- * survives inside {@link questSchema} only because the server's party routes
- * still serialize an empty floor array through the shared detail schema
- * (`loadQuestView` in `apps/server/src/routes/quests.ts`); the task that
- * retires that wrapper deletes this shape together with the override.
- *
- * @deprecated Use {@link parseChecklist} on the quest `direction` instead.
+ * In-app notification row for the current user.
  */
-const legacyFloorRowSchema = z.object({
-  id: idSchema,
-  title: z.string(),
-  orderKey: z.string(),
-  doneAt: timestampSchema.nullable(),
-  doneBy: userRefSchema.nullable(),
-});
-
-/** In-app notification row for the current user. */
 export const notificationSchema = z.object({
   id: idSchema,
   projectId: idSchema,
@@ -380,9 +354,7 @@ export const questSummarySchema = z.object({
   number: z.number().int(),
   title: z.string(),
   stage: stageSchema,
-  // Defaulted for new quests and optional so responses from a server that does
-  // not send the field yet still serialize (the F1 server task fills it in).
-  kind: questKindSchema.default("fix").optional(),
+  kind: questKindSchema,
   rank: rankSchema.nullable(),
   orderKey: z.string(),
   tags: z.array(z.string()),
@@ -402,10 +374,8 @@ export type QuestSummary = z.infer<typeof questSummarySchema>;
 /**
  * Full quest data returned by detail endpoints.
  *
- * `floors` is the checklist progress parsed from `direction` for every quest
- * route and for the web client. It still tolerates the deprecated floor row
- * array (always empty today) because the server's party routes serialize their
- * response through this schema until `loadQuestView` is retired.
+ * `floors` is the checklist progress parsed from `direction`; the retired
+ * floor rows no longer exist in the API.
  */
 export const questSchema = questSummarySchema.extend({
   projectId: idSchema,
@@ -414,19 +384,7 @@ export const questSchema = questSummarySchema.extend({
   archiveReason: z.string().nullable(),
   party: z.array(partyMemberSchema),
   nominations: z.array(nominationSchema),
-  /**
-   * Checklist progress (`{ done, total }`), or the deprecated — always empty —
-   * floor row array the party routes still emit.
-   *
-   * @deprecated Read `direction` through {@link parseChecklist}; the union is
-   * removed once the party-route wrapper stops returning floor rows.
-   */
-  floors: z.union([
-    questSummarySchema.shape.floors,
-    z.array(legacyFloorRowSchema),
-  ]),
-  // Defaulted for new refs and optional until the server sends the list.
-  refs: z.array(questRefSchema).default([]).optional(),
+  refs: z.array(questRefSchema),
   bounty: bountySchema,
   firstClaimedAt: timestampSchema.nullable(),
 });

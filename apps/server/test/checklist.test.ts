@@ -28,9 +28,7 @@ import {
 } from "./helpers.js";
 
 /** Quest detail as the checklist routes return it. */
-type QuestDetail = Omit<Quest, "floors"> & {
-  floors: { done: number; total: number };
-};
+type QuestDetail = Quest;
 
 let test: TestApp;
 let owner: UserRow;

@@ -26,7 +26,6 @@ import {
   type Bounty,
   type ClearRevokedPayload,
   type LevelUp,
-  type NotificationType,
   type QuestClearedPayload,
 } from "@guildloom/shared";
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -46,14 +45,6 @@ import {
   type CreatedNotification,
 } from "./party.js";
 import { awardXp, revokeXp } from "./xp.js";
-
-/**
- * `clear_revoked` is accepted by the shared notification enum at runtime, but
- * T01 keeps the pre-F1 TypeScript union until the web copy learns the case.
- * The cast is runtime-safe and stays local to this module.
- */
-const CLEAR_REVOKED_NOTIFICATION =
-  "clear_revoked" as unknown as NotificationType;
 
 /** One adventurer's newly paid clear reward. */
 export interface ClearReward {
@@ -443,7 +434,7 @@ export function revokeClear(
         userId,
         projectId: quest.projectId,
         questId: quest.id,
-        type: CLEAR_REVOKED_NOTIFICATION,
+        type: "clear_revoked",
         actorUserId: actor.id,
         payload,
         createdAt: now,

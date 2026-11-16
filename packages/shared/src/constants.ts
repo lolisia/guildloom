@@ -92,33 +92,26 @@ const LEGACY_NOTIFICATION_TYPES = [
 export type LegacyNotificationType =
   (typeof LEGACY_NOTIFICATION_TYPES)[number];
 
-/** F1 notification types, accepted at runtime by {@link NOTIFICATION_TYPES}. */
+/** Notification types added in F1. */
 export const F1_NOTIFICATION_TYPES = ["clear_revoked"] as const;
 
 /** An F1 notification type. */
 export type F1NotificationType = (typeof F1_NOTIFICATION_TYPES)[number];
 
 /**
- * Every in-app notification type, including the F1 additions.
+ * Every in-app notification type.
  *
- * `clear_revoked` is live at runtime: `notificationTypeSchema` accepts it and
- * the server writes it. Its TypeScript literal is folded into an existing
- * member until the F1 web task teaches the Korean copy switch about the new
- * case, so the current `apps/web` switch stays exhaustive without a second
- * workspace edit in this shared-only task.
+ * This tuple is the single source of truth: `notificationTypeSchema`, the
+ * `notifications.type` column and the web copy switch all derive from it, so
+ * a new type is added here once.
  */
 export const NOTIFICATION_TYPES = [
   ...LEGACY_NOTIFICATION_TYPES,
-  "clear_revoked" as LegacyNotificationType,
+  ...F1_NOTIFICATION_TYPES,
 ] as const;
 
 /** A notification type. */
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
-
-/** Every notification type, including the F1 additions (full union). */
-export type AnyNotificationType =
-  | LegacyNotificationType
-  | F1NotificationType;
 
 /** Reasons recorded in the XP ledger. */
 export const XP_REASONS = ["clear", "requester", "guide", "revoke"] as const;
