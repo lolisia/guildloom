@@ -2,8 +2,9 @@
  * Boss fight banner (보스전) at the top of the quest drawer.
  *
  * A quest in the `boss` stage waits for the requester's confirmation, so the
- * banner offers two actions: declare the clear (`POST /api/quests/:id/clear`)
- * or ask for another attempt (`POST /api/quests/:id/retry`). The retry dialog
+ * banner offers two actions: open the clear-preview confirmation (which sends
+ * `POST /api/quests/:id/clear` once confirmed) or ask for another attempt
+ * (`POST /api/quests/:id/retry`). The retry dialog
  * requires a 1–500 character comment; its submit button stays disabled until
  * the trimmed comment is non-empty.
  *
@@ -30,7 +31,7 @@ export const MAX_RETRY_COMMENT_LENGTH = 500;
 export interface BossBannerProps {
   projectId: number;
   quest: Quest;
-  /** Declare the clear through the shared drawer clear mutation. */
+  /** Open the shared clear-preview confirmation for this quest. */
   onClear: () => void;
   /** Whether a clear request is in flight. */
   clearPending: boolean;

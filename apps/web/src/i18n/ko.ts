@@ -335,9 +335,29 @@ export const ko = {
         action: "클리어 선언",
         working: "선언하는 중…",
         failed: "클리어를 선언하지 못했습니다.",
-        celebrationTitle: "던전 클리어!",
+        confirmTitle: "던전 클리어를 선언할까요?",
+        previewLoading: "클리어 정산을 불러오는 중…",
+        previewFailed: "클리어 정산을 불러오지 못했습니다.",
+        totalXp: (amount: number): string =>
+          `총 XP ${amount.toLocaleString("ko-KR")}`,
+        rewardsLabel: "받는 사람별 XP",
         reward: (amount: number): string =>
           `+${amount.toLocaleString("ko-KR")} XP`,
+        requesterBonus: (name: string, amount: number): string =>
+          `의뢰인 보너스: ${name} +${amount.toLocaleString("ko-KR")} XP`,
+        notInvolved: "이 의뢰의 의뢰인이나 파티원이 아닙니다.",
+        success: (amount: number): string =>
+          `던전 클리어! +${amount.toLocaleString("ko-KR")} XP`,
+        undo: "되돌리기",
+      },
+      unclear: {
+        action: "클리어 취소",
+        confirmTitle: "클리어 취소",
+        confirm: (amount: number): string =>
+          `클리어를 취소할까요? 지급된 XP ${amount.toLocaleString("ko-KR")}을 회수하고 보스전으로 되돌립니다.`,
+        working: "취소하는 중…",
+        failed: "클리어를 취소하지 못했습니다.",
+        success: "클리어를 취소했습니다.",
       },
     },
   },

@@ -17,8 +17,9 @@
  * - the adventure log is collapsed to the three most recent key events and
  *   expands to the full history;
  * - the boss banner renders the waiting copy, retry cannot be submitted with a
- *   blank comment and clearing shows the 던전 클리어! celebration with the
- *   caller's own XP and opens the T06 LEVEL UP modal.
+ *   blank comment and clearing opens the clear-preview confirmation, then
+ *   queues the 10s toast with the caller's own XP and opens the T06 LEVEL UP
+ *   modal.
  */
 import "./domEnvironment";
 
@@ -344,6 +345,27 @@ function stubApi(initialQuest: Quest, options: StubOptions = {}) {
         return noContentResponse();
       }
 
+      if (method === "GET" && path === "/api/quests/1/clear-preview") {
+        return jsonResponse({
+          total: 60,
+          rewards: [
+            {
+              user: { id: HERO.id, displayName: HERO.displayName },
+              amount: 40,
+            },
+            {
+              user: {
+                id: OTHER_REWARD_USER_ID,
+                displayName: "이모험",
+              },
+              amount: 20,
+            },
+          ],
+          requesterBonus: null,
+          actorIsInvolved: true,
+        });
+      }
+
       if (method === "POST" && path === "/api/quests/1/clear") {
         state.quest = { ...state.quest, stage: "cleared" };
         return jsonResponse({
@@ -354,6 +376,11 @@ function stubApi(initialQuest: Quest, options: StubOptions = {}) {
           ],
           levelUps: [{ userId: HERO.id, from: 1, to: 2 }],
         });
+      }
+
+      if (method === "POST" && path === "/api/quests/1/unclear") {
+        state.quest = { ...state.quest, stage: "boss" };
+        return jsonResponse(state.quest);
       }
 
       if (method === "POST" && path === "/api/quests/1/retry") {
@@ -988,10 +1015,12 @@ describe("Boss banner, retry and clear", () => {
       }),
     );
 
+    await confirmClear(user);
+
     await waitFor(() =>
       expect(callsTo(calls, "POST", "/api/quests/1/clear")).toHaveLength(1),
     );
-    await assertCelebrationAndLevelUp();
+    await assertClearToastAndLevelUp();
   });
 
   it.each(["board", "dungeon"] as const)(
@@ -1005,40 +1034,52 @@ describe("Boss banner, retry and clear", () => {
         screen.getByRole("button", { name: ko.board.drawer.clear.action }),
       );
 
+      await confirmClear(user);
+
       await waitFor(() =>
         expect(callsTo(calls, "POST", "/api/quests/1/clear")).toHaveLength(1),
       );
-      await assertCelebrationAndLevelUp();
+      await assertClearToastAndLevelUp();
     },
   );
 });
 
-/** Assert the 2s celebration copy, my reward and the T06 level-up modal. */
-async function assertCelebrationAndLevelUp(): Promise<void> {
-  const celebration = await screen.findByTestId("clear-celebration");
-  expect(celebration.textContent).not.toMatch(
-    /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu,
-  );
+/** Confirm the clear-preview dialog once its confirm button is enabled. */
+async function confirmClear(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
+  const dialog = await screen.findByRole("dialog", {
+    name: ko.board.drawer.clear.confirmTitle,
+  });
+  const confirm = within(dialog).getByRole("button", {
+    name: ko.board.drawer.clear.action,
+  });
+  await waitFor(() => expect(confirm).not.toBeDisabled());
+  await user.click(confirm);
+}
 
-  const card = celebration.firstElementChild as HTMLElement;
-  expect(card.className).not.toMatch(/gradient|blur|glow/);
-  expect(card.className).toContain("bg-paper");
-  expect(card.className).toContain("shadow-hard");
+/** Assert the 10s clear toast, my reward and the T06 level-up modal. */
+async function assertClearToastAndLevelUp(): Promise<void> {
+  const toast = useToastStore
+    .getState()
+    .toasts.find(
+      (entry) =>
+        entry.message === ko.board.drawer.clear.success(40),
+    );
+  expect(toast).toBeDefined();
+  expect(toast?.durationMs).toBe(10_000);
+  expect(toast?.action?.label).toBe(ko.board.drawer.clear.undo);
 
-  const title = within(celebration).getByText(
-    ko.board.drawer.clear.celebrationTitle,
-  );
-  expect(title).toHaveClass("font-pixel");
-  expect(title).toHaveClass("text-ink");
-
-  const reward = within(celebration).getByText(
-    ko.board.drawer.clear.reward(40),
-  );
-  expect(reward).toHaveClass("font-pixel");
-  expect(reward).toHaveClass("text-gold");
-  expect(
-    within(celebration).queryByText(ko.board.drawer.clear.reward(20)),
-  ).toBeNull();
+  await waitFor(() => {
+    expect(
+      useToastStore
+        .getState()
+        .toasts.some(
+          (entry) =>
+            entry.message === ko.board.drawer.clear.success(20),
+        ),
+    ).toBe(false);
+  });
 
   expect(useLevelUpStore.getState().current).toEqual({
     userId: HERO.id,

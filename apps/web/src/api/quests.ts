@@ -9,6 +9,7 @@ import type {
   AppendChecklistRequest,
   ArchiveQuestRequest,
   BulkCreateQuestsRequest,
+  ClearPreviewResponse,
   ClearQuestResponse,
   CreateQuestRefRequest,
   CreateQuestRequest,
@@ -217,6 +218,38 @@ export function clearQuest(
   signal?: AbortSignal,
 ): Promise<ClearQuestResponse> {
   return apiFetch<ClearQuestResponse>(`/quests/${questId}/clear`, {
+    method: "POST",
+    signal,
+  });
+}
+
+/**
+ * `GET /api/quests/:questId/clear-preview` — the planned clear settlement.
+ *
+ * Writes nothing: the server runs the same reward calculation as a real clear
+ * so the confirmation dialog can list the total, every recipient's share and
+ * the requester bonus before the caller commits.
+ */
+export function fetchClearPreview(
+  questId: number,
+  signal?: AbortSignal,
+): Promise<ClearPreviewResponse> {
+  return apiFetch<ClearPreviewResponse>(`/quests/${questId}/clear-preview`, {
+    signal,
+  });
+}
+
+/**
+ * `POST /api/quests/:questId/unclear` — revoke the clear and return to boss.
+ *
+ * The response is the reloaded quest in the `boss` stage; every awarded XP of
+ * the current round is taken back.
+ */
+export function unclearQuest(
+  questId: number,
+  signal?: AbortSignal,
+): Promise<Quest> {
+  return apiFetch<Quest>(`/quests/${questId}/unclear`, {
     method: "POST",
     signal,
   });

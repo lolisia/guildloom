@@ -11,8 +11,11 @@
  * stale server state. Checklist toggles are optimistic too and fall back to a
  * fresh detail fetch when the server reports `CHECKLIST_CONFLICT`.
  *
- * Declaring a clear celebrates the caller's own reward for ~2s and opens the
- * LEVEL UP modal when the settlement reports a level transition for them.
+ * Declaring a clear opens {@link ClearConfirmDialog} with the server's
+ * clear-preview, then celebrates the caller's own reward through the 10s toast
+ * with a 되돌리기 action (and opens the LEVEL UP modal when the settlement
+ * reports a level transition for them). A cleared quest can be revoked from the
+ * footer after a confirmation that names the XP being taken back.
  *
  * Layout follows DESIGN.md: the page is dimmed with the theme-aware `scrim`
  * token (never a blur) and a paper panel slides in from the right behind a
@@ -40,6 +43,7 @@ import {
   fetchEvents,
   fetchQuest,
   toggleChecklist,
+  unclearQuest,
   updateQuest,
 } from "../../api/quests";
 import { ko } from "../../i18n/ko";
@@ -50,16 +54,20 @@ import { pushToast } from "../../lib/toast";
 import { Button, TextInput } from "../ui";
 import BossBanner from "./BossBanner";
 import { ChecklistAddField, ChecklistText } from "./ChecklistText";
+import ClearConfirmDialog from "./ClearConfirmDialog";
+import {
+  invalidateClearQueries,
+  latestClearedXp,
+  pushClearToast,
+  sumMyReward,
+} from "./clearFeedback";
 import DungeonView from "./DungeonView";
 import EditableTextSection from "./EditableTextSection";
 import EventTimeline from "./EventTimeline";
 import PartySection from "./PartySection";
-import { invalidatePartyQueries } from "./partyCache";
 import QuestRefs from "./QuestRefs";
 import TagEditor from "./TagEditor";
-
-/** How long the 던전 클리어! celebration stays on screen. */
-export const CLEAR_CELEBRATION_MS = 2_000;
+import UnclearConfirmDialog from "./UnclearConfirmDialog";
 
 /** Props for {@link QuestDrawer}. */
 export interface QuestDrawerProps {
@@ -84,11 +92,6 @@ interface ChecklistToggleVariables {
 /** Snapshot needed to roll an optimistic checklist toggle back on failure. */
 interface ChecklistToggleContext {
   previous: Quest | undefined;
-}
-
-/** The caller's own reward, shown in the clear celebration. */
-interface ClearCelebration {
-  amount: number | null;
 }
 
 /** Slide-over quest detail panel. */
@@ -122,21 +125,9 @@ export function QuestDrawer({
   const quest = questQuery.data;
   const [titleDraft, setTitleDraft] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
-  const [celebration, setCelebration] = useState<ClearCelebration | null>(
-    null,
-  );
+  const [clearOpen, setClearOpen] = useState(false);
+  const [unclearOpen, setUnclearOpen] = useState(false);
   const seededQuestId = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!celebration) {
-      return;
-    }
-    const timer = window.setTimeout(
-      () => setCelebration(null),
-      CLEAR_CELEBRATION_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [celebration]);
 
   useEffect(() => {
     if (quest && seededQuestId.current !== quest.id) {
@@ -150,8 +141,9 @@ export function QuestDrawer({
       if (event.key !== "Escape") {
         return;
       }
-      if (confirmArchive) {
+      if (confirmArchive || unclearOpen) {
         setConfirmArchive(false);
+        setUnclearOpen(false);
         return;
       }
       onClose();
@@ -159,7 +151,7 @@ export function QuestDrawer({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [confirmArchive, onClose]);
+  }, [confirmArchive, onClose, unclearOpen]);
 
   const updateMutation = useMutation({
     mutationFn: (body: UpdateQuestRequest) => updateQuest(questId, body),
@@ -342,24 +334,20 @@ export function QuestDrawer({
   const clearMutation = useMutation({
     mutationFn: () => clearQuest(questId),
     onSuccess: (result) => {
+      setClearOpen(false);
       queryClient.setQueryData(queryKeys.quest(questId), result.quest);
-      invalidatePartyQueries(queryClient, projectId, questId);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.project(projectId),
-      });
+      invalidateClearQueries(queryClient, projectId, questId);
 
       const cachedMe = queryClient.getQueryData<{
         user: { id: number };
       }>(queryKeys.me);
       const currentMeId = cachedMe?.user.id ?? meId;
-      const myReward =
-        currentMeId === null
-          ? null
-          : result.rewards
-              .filter((reward) => reward.userId === currentMeId)
-              .reduce((total, reward) => total + reward.amount, 0);
-      setCelebration({ amount: myReward });
+      pushClearToast(
+        queryClient,
+        projectId,
+        questId,
+        sumMyReward(result.rewards, currentMeId),
+      );
 
       if (currentMeId !== null) {
         const levelUp = result.levelUps.find(
@@ -371,6 +359,26 @@ export function QuestDrawer({
       }
     },
   });
+
+  const unclearMutation = useMutation({
+    mutationFn: () => unclearQuest(questId),
+    onSuccess: (updated) => {
+      setUnclearOpen(false);
+      queryClient.setQueryData(queryKeys.quest(questId), updated);
+      invalidateClearQueries(queryClient, projectId, questId);
+      pushToast(ko.board.drawer.unclear.success);
+    },
+  });
+
+  const openClearConfirm = () => {
+    clearMutation.reset();
+    setClearOpen(true);
+  };
+
+  const openUnclearConfirm = () => {
+    unclearMutation.reset();
+    setUnclearOpen(true);
+  };
 
   const commitTitle = () => {
     if (!quest) {
@@ -456,7 +464,7 @@ export function QuestDrawer({
                 <BossBanner
                   projectId={projectId}
                   quest={quest}
-                  onClear={() => clearMutation.mutate()}
+                  onClear={openClearConfirm}
                   clearPending={clearMutation.isPending}
                   clearError={clearMutation.error}
                 />
@@ -601,8 +609,12 @@ export function QuestDrawer({
         {quest ? (
           <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3">
             <div className="min-w-0 text-xs text-muted">
-              {clearMutation.isError &&
-              (quest.stage === "board" || quest.stage === "dungeon") ? (
+              {unclearMutation.isError ? (
+                <p role="alert" className="text-brick">
+                  {ko.board.drawer.unclear.failed}
+                </p>
+              ) : clearMutation.isError &&
+                (quest.stage === "board" || quest.stage === "dungeon") ? (
                 <p role="alert" className="text-brick">
                   {ko.board.drawer.clear.failed}
                 </p>
@@ -623,11 +635,24 @@ export function QuestDrawer({
                 <Button
                   variant="primary"
                   disabled={clearMutation.isPending || archiveMutation.isPending}
-                  onClick={() => clearMutation.mutate()}
+                  onClick={openClearConfirm}
                 >
                   {clearMutation.isPending
                     ? ko.board.drawer.clear.working
                     : ko.board.drawer.clear.action}
+                </Button>
+              ) : null}
+              {quest.stage === "cleared" ? (
+                <Button
+                  variant="danger"
+                  disabled={
+                    unclearMutation.isPending || archiveMutation.isPending
+                  }
+                  onClick={openUnclearConfirm}
+                >
+                  {unclearMutation.isPending
+                    ? ko.board.drawer.unclear.working
+                    : ko.board.drawer.unclear.action}
                 </Button>
               ) : null}
               <Button
@@ -636,7 +661,9 @@ export function QuestDrawer({
                   archiveMutation.reset();
                   setConfirmArchive(true);
                 }}
-                disabled={clearMutation.isPending}
+                disabled={
+                  clearMutation.isPending || unclearMutation.isPending
+                }
               >
                 {ko.board.drawer.archive}
               </Button>
@@ -645,27 +672,32 @@ export function QuestDrawer({
         ) : null}
       </aside>
 
-      {celebration ? (
-        <div
-          data-testid="clear-celebration"
-          className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4"
-        >
-          <div
-            role="status"
-            className="clear-celebration flex items-center gap-3 rounded-sm border-[1.5px] border-line-strong bg-paper px-4 py-3 shadow-hard"
-          >
-            <div className="flex flex-col gap-1">
-              <p className="font-pixel text-[22px] leading-tight text-ink">
-                {ko.board.drawer.clear.celebrationTitle}
-              </p>
-              {celebration.amount !== null ? (
-                <p className="flex items-center gap-1 font-pixel text-[16px] text-gold">
-                  {ko.board.drawer.clear.reward(celebration.amount)}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </div>
+      {clearOpen ? (
+        <ClearConfirmDialog
+          questId={questId}
+          onConfirm={() => clearMutation.mutate()}
+          onClose={() => setClearOpen(false)}
+          pending={clearMutation.isPending}
+          failureMessage={
+            clearMutation.isError
+              ? ko.board.drawer.clear.failed
+              : null
+          }
+        />
+      ) : null}
+
+      {unclearOpen ? (
+        <UnclearConfirmDialog
+          xp={latestClearedXp(eventsQuery.data)}
+          onConfirm={() => unclearMutation.mutate()}
+          onClose={() => setUnclearOpen(false)}
+          pending={unclearMutation.isPending}
+          failureMessage={
+            unclearMutation.isError
+              ? ko.board.drawer.unclear.failed
+              : null
+          }
+        />
       ) : null}
 
       {confirmArchive ? (

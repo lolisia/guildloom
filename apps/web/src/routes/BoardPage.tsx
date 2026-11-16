@@ -4,8 +4,12 @@
  * The board fetches the four active stages in one request, groups the cards by
  * stage and lets adventurers drag cards between columns (or reorder within one)
  * with `@dnd-kit`. Drops are applied optimistically and rolled back when the
- * move endpoint fails. Quick add and bulk paste live at the top of the board
- * column; clicking a card opens the shared quest drawer through `?quest=<id>`.
+ * move endpoint fails. A card dropped into the `cleared` column is different:
+ * the move settles XP on the server, so it waits for the clear-preview
+ * confirmation dialog and only then sends the move. The resulting toast takes
+ * the caller's share from that preview because the move response has no
+ * rewards. Quick add and bulk paste live at the top of the board column;
+ * clicking a card opens the shared quest drawer through `?quest=<id>`.
  */
 import {
   closestCorners,
@@ -18,10 +22,11 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BOARD_COLUMNS,
+  type ClearPreviewResponse,
   type ListQuestsQuery,
   type QuestSummary,
 } from "@guildloom/shared";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { fetchQuests, moveQuest } from "../api/quests";
@@ -32,6 +37,12 @@ import {
   planQuestMove,
   type QuestMovePlan,
 } from "../components/board/movePlan";
+import {
+  invalidateClearQueries,
+  pushClearToast,
+  sumMyPreviewReward,
+} from "../components/quest/clearFeedback";
+import ClearConfirmDialog from "../components/quest/ClearConfirmDialog";
 import QuestDrawer from "../components/quest/QuestDrawer";
 import { Button, Panel } from "../components/ui";
 import { ko } from "../i18n/ko";
@@ -46,6 +57,20 @@ interface MoveVariables {
   plan: QuestMovePlan;
   /** Full optimistic list used for the immediate cache update. */
   quests: QuestSummary[];
+  /** Stage the card was in before the drop, for revocation invalidation. */
+  fromStage: QuestSummary["stage"];
+  /**
+   * The caller's share of the clear preview when the drop cleared the quest.
+   * Its presence is also what queues the celebration toast on success.
+   */
+  clearReward?: number;
+}
+
+/** A cleared-column drop waiting for its confirmation dialog. */
+interface PendingClearDrop {
+  plan: QuestMovePlan;
+  quests: QuestSummary[];
+  fromStage: QuestSummary["stage"];
 }
 
 /** Parse a positive integer route/search value. */
@@ -69,6 +94,8 @@ export default function BoardPage() {
   const queryClient = useQueryClient();
   const quickAddRef = useRef<HTMLInputElement | null>(null);
   const justDraggedRef = useRef(false);
+  const [pendingClearDrop, setPendingClearDrop] =
+    useState<PendingClearDrop | null>(null);
 
   const questsQuery = useQuery({
     queryKey: queryKeys.quests(projectId, BOARD_FILTERS),
@@ -107,7 +134,14 @@ export default function BoardPage() {
         );
       }
     },
-    onSettled: (_data, _error, { plan }) => {
+    onSuccess: (_data, { plan, clearReward }) => {
+      if (clearReward === undefined) {
+        return;
+      }
+      setPendingClearDrop(null);
+      pushClearToast(queryClient, projectId, plan.questId, clearReward);
+    },
+    onSettled: (_data, _error, { plan, fromStage }) => {
       // A move rewrites the quest's stage and order and writes a
       // `quest_moved` event, so an open drawer of the dragged quest is stale
       // until its detail and timeline refetch.
@@ -121,6 +155,11 @@ export default function BoardPage() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.events(questId),
       });
+      // Entering or leaving `cleared` also settles/revokes XP, so the
+      // adventurer, guild members and notification bell are stale too.
+      if (plan.stage === "cleared" || fromStage === "cleared") {
+        invalidateClearQueries(queryClient, projectId, questId);
+      }
     },
   });
 
@@ -160,6 +199,9 @@ export default function BoardPage() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     markJustDragged();
+    if (pendingClearDrop) {
+      return;
+    }
     const { active, over } = event;
     if (!over) {
       return;
@@ -169,17 +211,47 @@ export default function BoardPage() {
       return;
     }
 
-    const result = planQuestMove(
-      questsQuery.data ?? [],
-      activeId,
-      over.id,
-    );
-    if (!result) {
+    const quests = questsQuery.data ?? [];
+    const dragged = quests.find((quest) => quest.id === activeId);
+    const result = planQuestMove(quests, activeId, over.id);
+    if (!dragged || !result) {
       return;
     }
+
+    // Dropping into `cleared` settles XP: ask first, and do not touch the
+    // board until the dialog is confirmed.
+    if (result.plan.stage === "cleared" && dragged.stage !== "cleared") {
+      // Drop any failure from an earlier move so the dialog starts clean.
+      moveMutation.reset();
+      setPendingClearDrop({
+        plan: result.plan,
+        quests: result.quests,
+        fromStage: dragged.stage,
+      });
+      return;
+    }
+
     moveMutation.mutate({
       plan: result.plan,
       quests: result.quests,
+      fromStage: dragged.stage,
+    });
+  };
+
+  const confirmClearDrop = (preview: ClearPreviewResponse) => {
+    if (!pendingClearDrop) {
+      return;
+    }
+    const cachedMe = queryClient.getQueryData<{
+      user: { id: number };
+    }>(queryKeys.me);
+    const myShare = sumMyPreviewReward(
+      preview,
+      cachedMe?.user.id ?? null,
+    );
+    moveMutation.mutate({
+      ...pendingClearDrop,
+      clearReward: myShare,
     });
   };
 
@@ -294,6 +366,18 @@ export default function BoardPage() {
         <p role="alert" className="text-[13px] text-brick">
           {ko.board.moveFailed}
         </p>
+      ) : null}
+
+      {pendingClearDrop ? (
+        <ClearConfirmDialog
+          questId={pendingClearDrop.plan.questId}
+          onConfirm={confirmClearDrop}
+          onClose={() => setPendingClearDrop(null)}
+          pending={moveMutation.isPending}
+          failureMessage={
+            moveMutation.isError ? ko.board.moveFailed : null
+          }
+        />
       ) : null}
 
       {openQuestId !== null ? (
