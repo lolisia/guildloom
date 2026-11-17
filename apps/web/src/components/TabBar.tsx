@@ -169,7 +169,7 @@ export function TabBar() {
 
   return (
     <header className="sticky top-0 z-30 border-b-[1.5px] border-line-strong bg-paper">
-      <div className="mx-auto flex h-11 w-full max-w-screen-2xl items-center gap-4 px-4">
+      <div className="mx-auto flex h-11 w-full items-center gap-4 px-4">
         <Link
           to="/"
           className="flex shrink-0 items-center gap-2 font-pixel text-[16px] leading-none text-ink"

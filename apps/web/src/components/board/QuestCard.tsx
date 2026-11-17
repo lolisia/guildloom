@@ -2,12 +2,18 @@
  * A single draggable quest card: a paper request sheet pinned to the board.
  *
  * The whole card is the drag activator (pointer/touch sensors) and also opens
- * the quest drawer when clicked. Beyond the number, title and tags it shows the
- * M2a live board data: the active party (leader first, with status rings),
- * floor progress, the growing bounty and any pending nominations. A feature
- * request ("신규") carries a small border chip; dusty unclaimed quests are
- * desaturated and announce that state to assistive tech. A pending nomination
- * for the signed-in adventurer emphasises the card outline in teal.
+ * the quest drawer when clicked. The card is deliberately three rows tall so a
+ * full column stays scannable:
+ *
+ * 1. title row: the number, the optional 신규 chip and the clamped title,
+ * 2. tag row: the tag chips, only when the quest has tags,
+ * 3. meta row: floor progress, the growing bounty, the pending-nomination
+ *    badge, then a right-aligned block with the age and the party avatars
+ *    (leader first, overlapped, with status rings).
+ *
+ * A feature request ("신규") carries a small border chip; dusty unclaimed
+ * quests are desaturated and announce that state to assistive tech. A pending
+ * nomination for the signed-in adventurer emphasises the card outline in teal.
  *
  * Only the card being dragged is lifted off the wall: DESIGN.md's hard
  * `4px 4px 0 ink` shadow plus a `translate(-2px, -2px)` paper-lift. Resting
@@ -81,6 +87,7 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
     quest.floors.done,
     quest.floors.total,
   );
+  const hasFloors = quest.floors.total > 0;
   // The board stage is the unclaimed lane: there the creator avatar gives way
   // to the dashed "빈 파티" slip until someone joins the party.
   const showEmptyParty = quest.stage === "board" && quest.party.length === 0;
@@ -148,12 +155,14 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
             {ko.quest.kinds.feature}
           </span>
         ) : null}
+        <h3
+          className="min-w-0 flex-1 text-[14px] font-semibold leading-snug text-ink line-clamp-2"
+          title={quest.title}
+        >
+          {quest.title}
+        </h3>
         {dusty ? <span className="sr-only">{ko.quest.dusty}</span> : null}
       </div>
-
-      <h3 className="text-[14px] font-semibold leading-snug text-ink">
-        {quest.title}
-      </h3>
 
       {quest.tags.length > 0 ? (
         <ul className="flex flex-wrap gap-1" aria-label={ko.quest.tags}>
@@ -165,83 +174,84 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
         </ul>
       ) : null}
 
-      <PartyAvatarRow party={quest.party} />
-
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5">
-          <span className="sr-only">{ko.quest.floors}</span>
-          <span className="font-pixel text-[12px] text-ink">
-            {quest.floors.done}/{quest.floors.total}
-          </span>
-          {quest.floors.total > 0 ? (
+      <div
+        data-testid="card-meta"
+        className="flex min-h-6 flex-wrap items-center gap-2"
+      >
+        {hasFloors ? (
+          <span className="inline-flex items-center gap-1">
+            <span className="sr-only">{ko.quest.floors}</span>
+            <span className="font-pixel text-[12px] text-ink">
+              {quest.floors.done}/{quest.floors.total}
+            </span>
             <span
               role="progressbar"
               aria-label={`${ko.quest.floors} ${quest.floors.done}/${quest.floors.total}`}
               aria-valuemin={0}
               aria-valuemax={quest.floors.total}
               aria-valuenow={quest.floors.done}
-              className="h-1 min-w-10 flex-1 overflow-hidden rounded-sm bg-sunken"
+              className="h-1 w-8 overflow-hidden rounded-sm bg-sunken"
             >
               <span
                 className="block h-full bg-teal"
                 style={{ width: `${floorPercent}%` }}
               />
             </span>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1">
-            <span className="sr-only">{ko.quest.bounty}</span>
-            <span className="font-pixel text-[12px] text-gold">
-              {formatBounty(quest.bounty.total)}
-            </span>
           </span>
+        ) : null}
 
-          {quest.bounty.multiplier > 1 ? (
-            <span className="inline-flex items-center rounded-sm border border-gold px-1 font-pixel text-[12px] text-gold">
-              {ko.quest.bountyMultiplier(quest.bounty.multiplier)}
-            </span>
-          ) : null}
+        <span className="inline-flex items-center gap-1">
+          <span className="sr-only">{ko.quest.bounty}</span>
+          <span className="font-pixel text-[12px] text-gold">
+            {formatBounty(quest.bounty.total)}
+          </span>
+        </span>
 
-          {quest.pendingNominations > 0 ? (
-            <span
-              data-pending-nominations={quest.pendingNominations}
-              className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-0.5 text-xs text-muted"
-            >
-              <span>
-                {ko.quest.pendingNominations}{" "}
-                <span className="font-pixel text-[12px] text-ink">
-                  {quest.pendingNominations}
-                </span>
+        {quest.bounty.multiplier > 1 ? (
+          <span className="inline-flex items-center rounded-sm border border-gold px-1 py-0 font-pixel text-[12px] text-gold">
+            {ko.quest.bountyMultiplier(quest.bounty.multiplier)}
+          </span>
+        ) : null}
+
+        {quest.pendingNominations > 0 ? (
+          <span
+            data-pending-nominations={quest.pendingNominations}
+            className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-0 text-xs text-muted"
+          >
+            <span>
+              {ko.quest.pendingNominations}{" "}
+              <span className="font-pixel text-[12px] text-ink">
+                {quest.pendingNominations}
               </span>
             </span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <time
-          dateTime={new Date(quest.createdAt).toISOString()}
-          title={formatKoreanDate(quest.createdAt)}
-          className="text-[12px] text-muted"
-        >
-          {relativeTime(quest.createdAt)}
-        </time>
-        {showEmptyParty ? (
-          <span
-            data-testid="empty-party"
-            className="inline-flex h-6 items-center rounded-sm border-[1.5px] border-dashed border-line-strong px-2 text-[12px] text-muted"
-          >
-            {ko.quest.emptyParty}
           </span>
-        ) : (
-          <AdventurerSprite
-            userId={quest.createdBy.id}
-            displayName={quest.createdBy.displayName}
-            size="sm"
-          />
-        )}
+        ) : null}
+
+        <div className="ml-auto flex items-center gap-2">
+          <time
+            dateTime={new Date(quest.createdAt).toISOString()}
+            title={formatKoreanDate(quest.createdAt)}
+            className="text-[12px] text-muted"
+          >
+            {relativeTime(quest.createdAt)}
+          </time>
+          {quest.party.length > 0 ? (
+            <PartyAvatarRow party={quest.party} max={3} />
+          ) : showEmptyParty ? (
+            <span
+              data-testid="empty-party"
+              className="inline-flex h-5 items-center rounded-sm border-[1.5px] border-dashed border-line-strong px-2 text-[12px] text-muted"
+            >
+              {ko.quest.emptyParty}
+            </span>
+          ) : (
+            <AdventurerSprite
+              userId={quest.createdBy.id}
+              displayName={quest.createdBy.displayName}
+              size="sm"
+            />
+          )}
+        </div>
       </div>
     </article>
   );

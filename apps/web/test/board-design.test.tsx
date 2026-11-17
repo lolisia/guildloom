@@ -303,7 +303,8 @@ describe("board design", () => {
         "border-[1.5px]",
         "border-line-strong",
         "rounded-sm",
-        "p-3",
+        "p-2",
+        "gap-2",
       );
 
       const header = column.querySelector("header");

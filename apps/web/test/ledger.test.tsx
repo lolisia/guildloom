@@ -679,4 +679,29 @@ describe("LedgerPage", () => {
       within(dialog).getByTestId("quest-dungeon-placeholder"),
     ).toBeInTheDocument();
   });
+
+  it("caps the page width on the loaded ledger", async () => {
+    stubFetch(defaultHandler());
+    const { container } = renderLedger();
+
+    await screen.findByText("Alpha");
+
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-2xl",
+    );
+  });
+
+  it("caps the page width on the invalid-project ledger", () => {
+    stubFetch(defaultHandler());
+    const { container } = renderLedger("/g/abc/ledger");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(ko.errors.notFound);
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-2xl",
+    );
+  });
 });

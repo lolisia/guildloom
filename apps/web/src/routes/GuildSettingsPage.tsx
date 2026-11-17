@@ -57,7 +57,7 @@ export default function GuildSettingsPage() {
 
   if (projectId === null) {
     return (
-      <Panel className="space-y-2">
+      <Panel className="mx-auto w-full max-w-screen-lg space-y-2">
         <SettingsTitle />
         <p role="alert" className="text-sm text-brick">
           {ko.errors.notFound}
@@ -68,7 +68,7 @@ export default function GuildSettingsPage() {
 
   if (projectQuery.isPending || meQuery.isPending) {
     return (
-      <Panel className="space-y-2">
+      <Panel className="mx-auto w-full max-w-screen-lg space-y-2">
         <SettingsTitle />
         <p role="status" className="text-sm text-muted">
           {ko.common.loading}
@@ -79,7 +79,7 @@ export default function GuildSettingsPage() {
 
   if (projectQuery.isError) {
     return (
-      <Panel className="space-y-3">
+      <Panel className="mx-auto w-full max-w-screen-lg space-y-3">
         <SettingsTitle />
         <p role="alert" className="text-sm text-brick">
           {apiErrorMessage(projectQuery.error, ko.settings.loadFailed)}
@@ -104,7 +104,7 @@ export default function GuildSettingsPage() {
     );
 
   return (
-    <section className="space-y-5">
+    <section className="mx-auto w-full max-w-screen-lg space-y-5">
       <header>
         <SettingsTitle />
         <p className="mt-1 text-sm text-muted">{ko.settings.description}</p>

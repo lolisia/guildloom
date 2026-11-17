@@ -158,7 +158,7 @@ function installFetch(routes: Record<string, MockHandler>) {
   return fetchMock;
 }
 
-function renderSettings() {
+function renderSettings(initialEntry = "/g/1/settings") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -172,7 +172,7 @@ function renderSettings() {
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/g/1/settings"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route
             path="/g/:projectId/settings"
@@ -481,5 +481,75 @@ describe("GuildSettingsPage", () => {
     expect(ownerSprite).toHaveTextContent("김");
     expect((ownerSprite as HTMLElement).className).toContain("h-6");
     expect(list.querySelector('[data-user-id="2"]')).toHaveTextContent("아");
+  });
+
+  it("caps the page width on the loaded settings page", async () => {
+    installFetch({
+      "GET /api/auth/me": () => ({ body: { user: HERO } }),
+      "GET /api/projects/1": () => ({ body: detail([OWNER_MEMBER]) }),
+      "GET /api/projects/1/invites": () => ({ body: [] }),
+    });
+
+    const { container } = renderSettings();
+
+    await screen.findByLabelText(ko.settings.guildName);
+
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-lg",
+    );
+  });
+
+  it("caps the page width on the invalid-project panel", async () => {
+    installFetch({
+      "GET /api/auth/me": () => ({ body: { user: HERO } }),
+    });
+
+    const { container } = renderSettings("/g/abc/settings");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      ko.errors.notFound,
+    );
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-lg",
+    );
+  });
+
+  it("caps the page width while the guild loads", () => {
+    installFetch({
+      "GET /api/auth/me": () => new Promise<MockReply>(() => {}),
+      "GET /api/projects/1": () => new Promise<MockReply>(() => {}),
+    });
+
+    const { container } = renderSettings();
+
+    expect(screen.getByRole("status")).toHaveTextContent(ko.common.loading);
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-lg",
+    );
+  });
+
+  it("caps the page width on the load-error panel", async () => {
+    installFetch({
+      "GET /api/auth/me": () => ({ body: { user: HERO } }),
+      "GET /api/projects/1": () => ({
+        status: 500,
+        body: { error: { code: "internal_error", message: "boom" } },
+      }),
+    });
+
+    const { container } = renderSettings();
+
+    expect(await screen.findByText(ko.settings.loadFailed)).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass(
+      "mx-auto",
+      "w-full",
+      "max-w-screen-lg",
+    );
   });
 });
