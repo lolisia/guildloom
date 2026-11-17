@@ -226,7 +226,7 @@ export default function LedgerPage() {
 
   if (parsedProjectId === null) {
     return (
-      <section className="space-y-2">
+      <section className="mx-auto w-full max-w-screen-2xl space-y-2">
         <p role="alert" className="text-sm text-brick">
           {ko.errors.notFound}
         </p>
@@ -235,7 +235,7 @@ export default function LedgerPage() {
   }
 
   return (
-    <section className="space-y-4">
+    <section className="mx-auto w-full max-w-screen-2xl space-y-4">
       <header className="space-y-1">
         <h1 className="text-xl font-semibold text-ink">{ko.ledger.title}</h1>
         <p className="text-sm text-muted">{ko.ledger.description}</p>
