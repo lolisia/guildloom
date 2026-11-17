@@ -14,6 +14,7 @@ import {
   NOMINATION_STATES,
   NOTIFICATION_TYPES,
   PARTY_ROLES,
+  QUEST_KINDS,
   RANKS,
   STAGES,
 } from "./constants.js";
@@ -30,12 +31,38 @@ export const stageSchema = z.enum(STAGES);
 /** Quest rank enum. */
 export const rankSchema = z.enum(RANKS);
 
+/** Quest kind enum (`fix` or `feature`). */
+export const questKindSchema = z.enum(QUEST_KINDS);
+
 /** `{ id, displayName }` reference used for creators and actors. */
 export const userRefSchema = z.object({
   id: idSchema,
   displayName: z.string(),
 });
 export type UserRef = z.infer<typeof userRefSchema>;
+
+/** How a reference target is opened: a URL in the browser or a local path. */
+export const refKindSchema = z.enum(["url", "path"]);
+export type RefKind = z.infer<typeof refKindSchema>;
+
+/**
+ * Classify a reference target as a URL (`http://` or `https://`, case
+ * insensitive) or a local filesystem path.
+ */
+export function refKind(target: string): RefKind {
+  return /^https?:\/\//i.test(target.trim()) ? "url" : "path";
+}
+
+/** A reference document (참고 문서) attached to a quest. */
+export const questRefSchema = z.object({
+  id: idSchema,
+  label: z.string().nullable(),
+  target: z.string(),
+  kind: refKindSchema,
+  createdBy: userRefSchema,
+  createdAt: timestampSchema,
+});
+export type QuestRef = z.infer<typeof questRefSchema>;
 
 /** Login id: 3-32 lowercase letters, digits, dots, underscores or hyphens. */
 export const loginIdSchema = z
@@ -296,17 +323,9 @@ export const nominationSchema = z.object({
 });
 export type Nomination = z.infer<typeof nominationSchema>;
 
-/** A floor (층) of the quest dungeon. */
-export const floorSchema = z.object({
-  id: idSchema,
-  title: z.string(),
-  orderKey: z.string(),
-  doneAt: timestampSchema.nullable(),
-  doneBy: userRefSchema.nullable(),
-});
-export type Floor = z.infer<typeof floorSchema>;
-
-/** In-app notification row for the current user. */
+/**
+ * In-app notification row for the current user.
+ */
 export const notificationSchema = z.object({
   id: idSchema,
   projectId: idSchema,
@@ -335,6 +354,7 @@ export const questSummarySchema = z.object({
   number: z.number().int(),
   title: z.string(),
   stage: stageSchema,
+  kind: questKindSchema,
   rank: rankSchema.nullable(),
   orderKey: z.string(),
   tags: z.array(z.string()),
@@ -351,7 +371,12 @@ export const questSummarySchema = z.object({
 });
 export type QuestSummary = z.infer<typeof questSummarySchema>;
 
-/** Full quest data returned by detail endpoints. */
+/**
+ * Full quest data returned by detail endpoints.
+ *
+ * `floors` is the checklist progress parsed from `direction`; the retired
+ * floor rows no longer exist in the API.
+ */
 export const questSchema = questSummarySchema.extend({
   projectId: idSchema,
   situation: z.string(),
@@ -359,7 +384,7 @@ export const questSchema = questSummarySchema.extend({
   archiveReason: z.string().nullable(),
   party: z.array(partyMemberSchema),
   nominations: z.array(nominationSchema),
-  floors: z.array(floorSchema),
+  refs: z.array(questRefSchema),
   bounty: bountySchema,
   firstClaimedAt: timestampSchema.nullable(),
 });
@@ -383,6 +408,7 @@ export const createQuestRequestSchema = z.object({
   direction: z.string().max(20_000).optional(),
   tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
   rank: rankSchema.nullable().optional(),
+  kind: questKindSchema.optional(),
 });
 export type CreateQuestRequest = z.infer<typeof createQuestRequestSchema>;
 
@@ -399,6 +425,15 @@ export type BulkCreateQuestsRequest = z.infer<
 /** `PATCH /api/quests/:id` request. */
 export const updateQuestRequestSchema = createQuestRequestSchema.partial();
 export type UpdateQuestRequest = z.infer<typeof updateQuestRequestSchema>;
+
+/** `POST /api/quests/:id/refs` request (참고 문서 추가). */
+export const createQuestRefRequestSchema = z.object({
+  label: z.string().trim().max(100).optional(),
+  target: z.string().trim().min(1).max(1000),
+});
+export type CreateQuestRefRequest = z.infer<
+  typeof createQuestRefRequestSchema
+>;
 
 /** `POST /api/quests/:id/move` request. */
 export const moveQuestRequestSchema = z.object({
@@ -447,27 +482,24 @@ export const retryQuestRequestSchema = z.object({
 });
 export type RetryQuestRequest = z.infer<typeof retryQuestRequestSchema>;
 
-/** `POST /api/quests/:id/floors` request (층 추가). */
-export const addFloorsRequestSchema = z.object({
-  // Whitespace-only lines are allowed through the schema; the server drops
-  // them before creating floors.
+/** `POST /api/quests/:id/checklist/:index` request (체크리스트 토글). */
+export const toggleChecklistRequestSchema = z.object({
+  done: z.boolean(),
+  text: z.string(),
+});
+export type ToggleChecklistRequest = z.infer<
+  typeof toggleChecklistRequestSchema
+>;
+
+/** `POST /api/quests/:id/checklist` request (체크리스트 항목 추가). */
+export const appendChecklistRequestSchema = z.object({
+  // Whitespace-only titles are allowed through the schema; the server drops
+  // them before appending the checklist lines.
   titles: z.array(z.string().max(200)).min(1).max(50),
 });
-export type AddFloorsRequest = z.infer<typeof addFloorsRequestSchema>;
-
-/** `PATCH /api/floors/:id` request. */
-export const updateFloorRequestSchema = z.object({
-  title: z.string().trim().min(1).max(200).optional(),
-  done: z.boolean().optional(),
-});
-export type UpdateFloorRequest = z.infer<typeof updateFloorRequestSchema>;
-
-/** `POST /api/floors/:id/move` request. */
-export const moveFloorRequestSchema = z.object({
-  beforeId: idSchema.optional(),
-  afterId: idSchema.optional(),
-});
-export type MoveFloorRequest = z.infer<typeof moveFloorRequestSchema>;
+export type AppendChecklistRequest = z.infer<
+  typeof appendChecklistRequestSchema
+>;
 
 /** `POST /api/notifications/read` request. */
 export const readNotificationsRequestSchema = z.object({
@@ -508,6 +540,25 @@ export const clearQuestResponseSchema = z.object({
 });
 export type ClearQuestResponse = z.infer<typeof clearQuestResponseSchema>;
 
+/** `GET /api/quests/:id/clear-preview` response. */
+export const clearPreviewResponseSchema = z.object({
+  total: z.number().int(),
+  rewards: z.array(
+    z.object({
+      user: userRefSchema,
+      amount: z.number().int(),
+    }),
+  ),
+  requesterBonus: z
+    .object({
+      user: userRefSchema,
+      amount: z.number().int(),
+    })
+    .nullable(),
+  actorIsInvolved: z.boolean(),
+});
+export type ClearPreviewResponse = z.infer<typeof clearPreviewResponseSchema>;
+
 /** `GET /api/notifications` response. */
 export const notificationListResponseSchema = z.object({
   items: z.array(notificationSchema),
@@ -516,10 +567,6 @@ export const notificationListResponseSchema = z.object({
 export type NotificationListResponse = z.infer<
   typeof notificationListResponseSchema
 >;
-
-/** `POST /api/quests/:id/floors` response (the quest's floors). */
-export const floorListResponseSchema = z.array(floorSchema);
-export type FloorListResponse = z.infer<typeof floorListResponseSchema>;
 
 /** `GET /api/me/nominations` response (my pending nominations). */
 export const myNominationsResponseSchema = z.array(myNominationSchema);

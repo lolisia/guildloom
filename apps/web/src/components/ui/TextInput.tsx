@@ -1,9 +1,9 @@
 /**
  * Single-line text input styled like a paper request form.
  *
- * Paper background, 1.5px `line-strong` outline and the global teal focus ring;
- * everything else is passed straight through, so labels, ids, aria attributes
- * and controlled values keep working.
+ * Paper background, 1.5px `line-strong` outline, a 28px height (8px horizontal
+ * padding) and the global teal focus ring; everything else is passed straight
+ * through, so labels, ids, aria attributes and controlled values keep working.
  */
 import { forwardRef, type InputHTMLAttributes } from "react";
 
@@ -14,7 +14,7 @@ export type TextInputProps = InputHTMLAttributes<HTMLInputElement>;
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
   function TextInput({ className, ...rest }, ref) {
     const classes = [
-      "w-full rounded-sm border-[1.5px] border-line-strong bg-paper px-2.5 py-1.5 text-sm text-ink placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50",
+      "h-7 w-full rounded-sm border-[1.5px] border-line-strong bg-paper px-2 text-[13px] text-ink placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-50",
       className ?? "",
     ]
       .filter(Boolean)

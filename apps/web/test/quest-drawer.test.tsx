@@ -1,15 +1,15 @@
 // @vitest-environment node
 /**
- * Quest drawer restyle tests (T06).
+ * Quest drawer restyle tests (T06, F1 density).
  *
  * The drawer is the main detail surface, so this file pins the design-system
  * contract: an ink 40% overlay without blur, a paper panel behind a 1.5px
- * line-strong rule, the sunken 120px stage panel with its 64px icon and 2px
- * stage mark, the 64px rank badge next to the unchanged rank select, the
- * archived action and confirmation dialog, Chip-based tags and the 32px event
- * icons. Selectors used by board.test.tsx (dungeon placeholder, situation,
- * events, archive dialog, combobox, tag controls) are asserted here as well so
- * a restyle cannot silently break them.
+ * line-strong rule, the sunken 88px stage panel with its 64px icon and 2px
+ * stage mark, the 수정/신규 kind segments that replaced the rank control, the
+ * collapsed adventure log without row icons, the archived action and
+ * confirmation dialog and Chip-based tags. Selectors used by board.test.tsx
+ * (dungeon placeholder, situation, events, archive dialog, tag controls) are
+ * asserted here as well so a restyle cannot silently break them.
  *
  * As in the other DOM tests, jsdom is installed manually because Vitest cannot
  * resolve the workspace-local copy from the hoisted runner.
@@ -82,10 +82,8 @@ const userEvent = (await import("@testing-library/user-event")).default;
 const { QueryClient, QueryClientProvider } = await import(
   "@tanstack/react-query"
 );
-const { RANKS } = await import("@guildloom/shared");
 
 const { QuestDrawer } = await import("../src/components/quest/QuestDrawer");
-const { eventIcon } = await import("../src/components/quest/EventTimeline");
 const { STAGE_MARK_CLASSES } = await import(
   "../src/components/quest/stageMark"
 );
@@ -104,6 +102,7 @@ const QUEST: Quest = {
   number: 283,
   title: "보드 첫 의뢰",
   stage: "board",
+  kind: "fix",
   rank: "B",
   orderKey: "a0",
   tags: ["긴급", "버그"],
@@ -123,18 +122,11 @@ const QUEST: Quest = {
   bounty: { base: 150, multiplier: 1, total: 150, days: 0, dusty: false },
   projectId: 1,
   situation: "첫 줄\n둘째 줄 https://example.com",
-  direction: "다음 단계로 진행합니다.",
+  direction: "- [ ] 1층: 재현",
   archiveReason: null,
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 재현",
-      orderKey: "a0",
-      doneAt: null,
-      doneBy: null,
-    },
-  ],
+  floors: { done: 0, total: 1 },
+  refs: [],
   firstClaimedAt: CREATED_AT,
 };
 
@@ -270,7 +262,7 @@ afterEach(() => {
 });
 
 describe("QuestDrawer design", () => {
-  it("dims with scrim, opens a paper panel and closes with the close icon", async () => {
+  it("dims with scrim, opens a paper panel and closes with the text button", async () => {
     const { dialog } = await openDrawer();
     const overlay = dialog.parentElement as HTMLElement;
 
@@ -283,28 +275,31 @@ describe("QuestDrawer design", () => {
     expect(dialog.className).toContain("border-line-strong");
     expect(dialog.className).toContain("rounded-none");
     expect(dialog.className).toContain("h-full");
+    expect(dialog.className).toContain("w-[40vw]");
+    expect(dialog.className).toContain("min-w-[360px]");
+    expect(dialog.className).toContain("max-w-[560px]");
     expect(dialog.className).not.toContain("shadow-2xl");
     expect(dialog.className).not.toMatch(/rounded-(xl|2xl|3xl|full)/);
+
+    const title = within(dialog).getByRole("heading", {
+      name: ko.board.drawer.title,
+    });
+    expect(title).toHaveClass("text-[18px]");
 
     const close = within(dialog).getByRole("button", {
       name: ko.common.close,
     });
-    expect(close.textContent).toBe("");
-    const closeIcon = close.querySelector("img");
-    expect(closeIcon?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/close.png",
-    );
-    expect(closeIcon).toHaveAttribute("width", "32");
-    expect(closeIcon).toHaveAttribute("height", "32");
+    expect(close.textContent).toBe(ko.common.close);
+    expect(close.querySelector("img")).toBeNull();
   });
 
-  it("keeps the 120px sunken dungeon view with stage icon, mark, progress and party sprite", async () => {
+  it("keeps the 88px sunken dungeon view with stage icon, mark, progress and party sprite", async () => {
     const { dialog } = await openDrawer();
     const placeholder = within(dialog).getByTestId(
       "quest-dungeon-placeholder",
     );
 
-    expect(placeholder).toHaveStyle({ height: "120px" });
+    expect(placeholder).toHaveStyle({ height: "88px" });
     expect(placeholder.className).toContain("bg-sunken");
     expect(placeholder.className).toContain("border-[1.5px]");
     expect(placeholder.className).toContain("border-line-strong");
@@ -314,7 +309,7 @@ describe("QuestDrawer design", () => {
     expect(
       within(placeholder).getByText(ko.board.drawer.dungeonView),
     ).toBeInTheDocument();
-    // QUEST has one unchecked floor, so the board fallback (0%) is used.
+    // QUEST has one unchecked checklist item, so progress is 0/1.
     expect(placeholder).toHaveAttribute("data-dungeon-progress", "0");
 
     const stageIcon = placeholder.querySelector("img");
@@ -338,7 +333,7 @@ describe("QuestDrawer design", () => {
 
     const partySprite = placeholder.querySelector('[data-user-id="7"]');
     expect(partySprite).not.toBeNull();
-    expect(partySprite).toHaveClass("h-8", "w-8");
+    expect(partySprite).toHaveClass("h-7", "w-7");
     expect(partySprite).toHaveAttribute("data-state", "attack");
   });
 
@@ -364,32 +359,20 @@ describe("QuestDrawer design", () => {
     );
   });
 
-  it("shows a 64px rank badge beside the unchanged rank combobox", async () => {
+  it("shows kind segments instead of the retired rank control", async () => {
     const { dialog } = await openDrawer();
 
-    const select = within(dialog).getByRole("combobox", {
-      name: ko.quest.rank,
-    }) as HTMLSelectElement;
-    expect(select).toHaveValue("B");
-    expect(Array.from(select.options).map((option) => option.value)).toEqual([
-      "",
-      ...RANKS,
-    ]);
-    expect(
-      Array.from(select.options).map((option) => option.textContent),
-    ).toEqual([
-      ko.quest.rankNone,
-      ...RANKS.map((rank) => ko.quest.ranks[rank]),
-    ]);
+    const fix = within(dialog).getByRole("button", {
+      name: ko.quest.kinds.fix,
+    });
+    const feature = within(dialog).getByRole("button", {
+      name: ko.quest.kinds.feature,
+    });
+    expect(fix).toHaveAttribute("aria-pressed", "true");
+    expect(feature).toHaveAttribute("aria-pressed", "false");
 
-    const badge = dialog.querySelector('[data-rank="B"]');
-    expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent("등급 B");
-    const badgeIcon = badge?.querySelector("img");
-    expect(badgeIcon?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/64/rank-b.png",
-    );
-    expect(badgeIcon).toHaveAttribute("width", "64");
+    expect(dialog.querySelector("[data-rank]")).toBeNull();
+    expect(dialog.textContent).not.toContain("등급");
   });
 
   it("styles the title and situation with atoms and sentence-case labels", async () => {
@@ -439,83 +422,97 @@ describe("QuestDrawer design", () => {
     expect(tagInput.className).toContain("border-line-strong");
   });
 
-  it("gives every event row a 32px icon and keeps the event hooks", async () => {
-    const { dialog } = await openDrawer();
+  it("collapses the adventure log to key events and expands the full history", async () => {
+    const { dialog, user } = await openDrawer();
 
     await screen.findByText(formatKoreanDateTime(EVENTS[0]!.createdAt));
 
+    // Collapsed: only the quest_posted key event is visible, without an icon.
     const rows = Array.from(
       dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
     );
-    expect(rows).toHaveLength(EVENTS.length);
-    expect(rows.map((row) => Number(row.dataset.eventId))).toEqual([
-      10, 11, 12, 13, 14,
-    ]);
-    expect(rows.map((row) => row.dataset.eventType)).toEqual([
-      "quest_posted",
-      "quest_edited",
-      "quest_moved",
-      "quest_archived",
-      "quest_moved",
-    ]);
-
-    const icons = rows.map((row) => row.querySelector("img"));
-    expect(icons.map((icon) => icon?.getAttribute("src"))).toEqual([
-      "/assets/icons/jrpg-v1/32/quest.png",
-      "/assets/icons/jrpg-v1/32/edit.png",
-      "/assets/icons/jrpg-v1/32/dungeon.png",
-      "/assets/icons/jrpg-v1/32/dropped.png",
-      "/assets/icons/jrpg-v1/32/board.png",
-    ]);
-    for (const [index, icon] of icons.entries()) {
-      expect(icon).toHaveAttribute("width", "32");
-      expect(icon).toHaveAttribute("height", "32");
-      expect(rows[index]?.firstElementChild).toBe(icon);
-    }
-
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveAttribute("data-event-id", "10");
+    expect(rows[0]?.querySelector("img")).toBeNull();
+    expect(
+      within(rows[0]!).getByText(formatKoreanDateTime(EVENTS[0]!.createdAt)),
+    ).toBeInTheDocument();
     expect(
       rows[0]?.querySelectorAll("[data-segment]").length,
     ).toBeGreaterThan(0);
     expect(within(rows[0]!).getByText("'김모험'")).toBeInTheDocument();
+
+    const toggle = within(dialog).getByRole("button", {
+      name: ko.board.drawer.showAllHistory(EVENTS.length),
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(
+        Array.from(
+          dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+        ).map((row) => Number(row.dataset.eventId)),
+      ).toEqual([10, 11, 12, 13, 14]),
+    );
     for (const event of EVENTS) {
       expect(
         within(dialog).getByText(formatKoreanDateTime(event.createdAt)),
       ).toBeInTheDocument();
     }
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(1);
   });
 
-  it("maps every M2 event type to its icon", () => {
-    const expected: Partial<Record<QuestEvent["type"], string>> = {
-      nominated: "nominate",
-      reinforcement_requested: "reinforce",
-      claimed: "accept",
-      passed: "pass",
-      relayed: "relay",
-      member_joined: "joined",
-      member_left: "retreated",
-      member_status_changed: "fighting",
-      leader_changed: "party",
-      floor_added: "floor",
-      floor_checked: "floor",
-      boss_engaged: "boss",
-      retry_requested: "refresh",
-      quest_cleared: "cleared",
-    };
-
-    for (const [type, icon] of Object.entries(expected)) {
-      expect(
-        eventIcon({ ...EVENTS[0]!, type: type as QuestEvent["type"] }),
-      ).toBe(icon);
-    }
-  });
-
-  it("falls back to the neutral arrow for an unknown type or stage", () => {
-    expect(
-      eventIcon({ ...EVENTS[0]!, type: "quest_reopened" as QuestEvent["type"] }),
-    ).toBe("arrow-right");
-    expect(eventIcon({ ...EVENTS[2]!, payload: { to: "limbo" } })).toBe(
-      "arrow-right",
+  it("shows the empty key-event copy when only non-key events exist", async () => {
+    const onlyEdits = EVENTS.filter(
+      (event) =>
+        event.type !== "quest_posted" &&
+        event.type !== "member_joined" &&
+        event.type !== "member_left" &&
+        event.type !== "boss_engaged" &&
+        event.type !== "retry_requested" &&
+        event.type !== "quest_cleared" &&
+        event.type !== "clear_revoked",
     );
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init: RequestInit = {}) => {
+        const url = new URL(String(input), "http://localhost");
+        const method = (init.method ?? "GET").toUpperCase();
+        if (method === "GET" && url.pathname === "/api/quests/1") {
+          return jsonResponse(QUEST);
+        }
+        if (method === "GET" && url.pathname === "/api/quests/1/events") {
+          return jsonResponse(onlyEdits);
+        }
+        if (method === "GET" && url.pathname === "/api/projects/1/tags") {
+          return jsonResponse([]);
+        }
+        return jsonResponse(
+          { error: { code: "not_found", message: "not found" } },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <QuestDrawer projectId={1} questId={1} onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: ko.board.drawer.title,
+    });
+    expect(
+      await within(dialog).findByText(ko.board.drawer.keyEventsEmpty),
+    ).toBeInTheDocument();
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
   });
 
   it("keeps archive dangerous and confirms on paper with the hard shadow", async () => {
@@ -526,9 +523,7 @@ describe("QuestDrawer design", () => {
     });
     expect(archive.className).toContain("border-brick");
     expect(archive.className).toContain("text-brick");
-    expect(archive.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/dropped.png",
-    );
+    expect(archive.querySelector("img")).toBeNull();
 
     await user.click(archive);
 

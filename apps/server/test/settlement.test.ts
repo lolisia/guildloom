@@ -3,8 +3,9 @@
  *
  * They cover the whole HTTP surface of `POST /api/quests/:id/clear`,
  * `POST /api/quests/:id/retry` and the `cleared` branch of
- * `POST /api/quests/:id/move`: bounty splitting, requester XP, idempotent
- * ledger keys, level ups, member resets, notifications and realtime signals.
+ * `POST /api/quests/:id/move`: bounty splitting, requester XP, per-round
+ * idempotent ledger keys, level ups, member resets, notifications, the
+ * revocation of a round when the card leaves `cleared`, and realtime signals.
  */
 import { and, asc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,6 +14,7 @@ import type {
   ClearQuestResponse,
   MeResponse,
   Notification,
+  NotificationType,
   ProjectDetailResponse,
   Quest,
 } from "@guildloom/shared";
@@ -82,16 +84,17 @@ afterEach(async () => {
   await test.close();
 });
 
-/** POST a quest and return its detail. */
-async function createQuest(
-  title = "정산 의뢰",
-  rank: "F" | "E" | "D" | "C" | "B" | "A" | "S" = "D",
-): Promise<Quest> {
+/**
+ * POST a quest and return its detail.
+ *
+ * Ranks no longer change the bounty: every clear is worth BASE_CLEAR_XP (40).
+ */
+async function createQuest(title = "정산 의뢰"): Promise<Quest> {
   const response = await test.app.inject({
     method: "POST",
     url: `/api/projects/${project.id}/quests`,
     headers: { cookie: ownerCookie },
-    payload: { title, rank },
+    payload: { title },
   });
   expect(response.statusCode).toBe(201);
   return response.json() as Quest;
@@ -181,7 +184,7 @@ function eventPayloads(questId: number, type: string): unknown[] {
     .map((event) => JSON.parse(event.payload) as unknown);
 }
 
-function notificationRows(userId: number, type?: string) {
+function notificationRows(userId: number, type?: NotificationType) {
   const conditions = [eq(notifications.userId, userId)];
   if (type !== undefined) {
     conditions.push(eq(notifications.type, type));
@@ -469,7 +472,7 @@ describe("clear settlement", () => {
     ]);
   });
 
-  it("never pays the same ledger key twice after moving out and back", async () => {
+  it("replays a cleared reorder, then revokes and pays a new round after leaving cleared", async () => {
     const quest = await createQuest();
     await joinQuest(quest.id, aliceCookie);
 
@@ -481,49 +484,75 @@ describe("clear settlement", () => {
     ]);
     const ledgerAfterFirst = ledgerRows(quest.id);
     expect(ledgerAfterFirst).toHaveLength(2);
+    expect(storedUser(alice.id).xp).toBe(40);
 
     // The stage guard rejects a second clear while already cleared.
     expect((await clearQuest(quest.id)).statusCode).toBe(409);
 
-    const xpBefore = storedUser(alice.id).xp;
-
-    // Move out: the award is kept.
-    const out = await moveQuest(quest.id, "dungeon");
-    expect(out.statusCode).toBe(200);
-    expect(out.json<Quest>().stage).toBe("dungeon");
-    expect(storedUser(alice.id).xp).toBe(xpBefore);
-
-    // Clearing again returns only the newly awarded rewards (none).
-    const second = await clearQuest(quest.id);
-    expect(second.statusCode).toBe(200);
-    const secondBody = second.json() as ClearQuestResponse;
-    expect(secondBody.rewards).toEqual([]);
-    expect(secondBody.levelUps).toEqual([]);
-    expect(ledgerRows(quest.id)).toHaveLength(ledgerAfterFirst.length);
-    expect(storedUser(alice.id).xp).toBe(xpBefore);
-
-    // Dragging back into cleared goes through the same settlement.
-    expect((await moveQuest(quest.id, "board")).statusCode).toBe(200);
-    const moved = await moveQuest(quest.id, "cleared");
-    expect(moved.statusCode).toBe(200);
-    expect(moved.json<Quest>().stage).toBe("cleared");
-    expect(ledgerRows(quest.id)).toHaveLength(ledgerAfterFirst.length);
-    expect(storedUser(alice.id).xp).toBe(xpBefore);
-
     // Reordering inside the cleared column is not a new clear: it replays the
-    // idempotent settlement without another event or notification.
-    const eventsAfterClears = eventRows(quest.id).length;
-    const notificationsAfterClears = notificationRows(
+    // idempotent settlement without another award, event or notification.
+    const eventsAfterClear = eventRows(quest.id).length;
+    const notificationsAfterClear = notificationRows(
       alice.id,
       "quest_cleared",
     ).length;
     expect((await moveQuest(quest.id, "cleared")).statusCode).toBe(200);
-    expect(eventRows(quest.id)).toHaveLength(eventsAfterClears);
-    expect(notificationRows(alice.id, "quest_cleared")).toHaveLength(
-      notificationsAfterClears,
-    );
     expect(ledgerRows(quest.id)).toHaveLength(ledgerAfterFirst.length);
-    expect(storedUser(alice.id).xp).toBe(xpBefore);
+    expect(eventRows(quest.id)).toHaveLength(eventsAfterClear);
+    expect(notificationRows(alice.id, "quest_cleared")).toHaveLength(
+      notificationsAfterClear,
+    );
+    expect(storedUser(alice.id).xp).toBe(40);
+
+    // Dragging the card out revokes the round instead of keeping the award.
+    const out = await moveQuest(quest.id, "dungeon");
+    expect(out.statusCode).toBe(200);
+    expect(out.json<Quest>().stage).toBe("dungeon");
+    expect(storedUser(alice.id).xp).toBe(0);
+    expect(storedUser(owner.id).xp).toBe(0);
+    expect(
+      ledgerRows(quest.id).map((row) => [
+        row.reason,
+        row.amount,
+        row.idemKey,
+      ]),
+    ).toEqual([
+      ["clear", 40, `clear:${quest.id}:${alice.id}`],
+      ["requester", 5, `requester:${quest.id}`],
+      ["revoke", -40, `revoke:clear:${quest.id}:${alice.id}`],
+      ["revoke", -5, `revoke:requester:${quest.id}`],
+    ]);
+    expect(eventPayloads(quest.id, "clear_revoked")).toEqual([
+      { xpRevoked: 45 },
+    ]);
+    expect(
+      eventRows(quest.id).filter((event) => event.type === "clear_revoked"),
+    ).toHaveLength(1);
+
+    // Clearing again starts round 2: the awards are paid again under `:r2`.
+    const second = await clearQuest(quest.id);
+    expect(second.statusCode).toBe(200);
+    expect((second.json() as ClearQuestResponse).rewards).toEqual([
+      { userId: alice.id, amount: 40 },
+      { userId: owner.id, amount: 5 },
+    ]);
+    expect(storedUser(alice.id).xp).toBe(40);
+    expect(storedUser(owner.id).xp).toBe(5);
+    expect(
+      ledgerRows(quest.id)
+        .filter((row) => row.reason !== "revoke")
+        .map((row) => row.idemKey),
+    ).toEqual([
+      `clear:${quest.id}:${alice.id}`,
+      `requester:${quest.id}`,
+      `clear:${quest.id}:${alice.id}:r2`,
+      `requester:${quest.id}:r2`,
+    ]);
+
+    // A reorder in round 2 still pays nothing and revokes nothing.
+    expect((await moveQuest(quest.id, "cleared")).statusCode).toBe(200);
+    expect(storedUser(alice.id).xp).toBe(40);
+    expect(eventPayloads(quest.id, "clear_revoked")).toHaveLength(1);
   });
 
   it("settles when a card is dragged into cleared at a neighbor order key", async () => {

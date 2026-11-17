@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * Design-system tests: the pixel Icon, the rank badge, the theme module, the
- * theme menu and the shared UI atoms.
+ * Design-system tests: the pixel Icon, the theme module, the theme menu and the
+ * shared UI atoms (including the compact 28px control and avatar density).
  *
  * This workspace keeps `jsdom` inside `apps/web/node_modules` while Vitest is
  * hoisted to the repository root, so the built-in `jsdom` environment cannot
@@ -12,6 +12,8 @@
  * `setSystemDark` flips the OS preference and notifies subscribers, which is
  * exactly what `watchSystemTheme` listens for.
  */
+import { readFileSync } from "node:fs";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ThemePreference } from "../src/lib/theme";
@@ -137,7 +139,6 @@ const { cleanup, fireEvent, render, within } = await import(
 const userEvent = (await import("@testing-library/user-event")).default;
 
 const { default: Icon, iconSources } = await import("../src/components/Icon");
-const { default: RankBadge } = await import("../src/components/RankBadge");
 const { default: ThemeMenu } = await import("../src/components/ThemeMenu");
 const { default: Button } = await import("../src/components/ui/Button");
 const { default: Chip } = await import("../src/components/ui/Chip");
@@ -213,46 +214,6 @@ describe("Icon", () => {
       src: "/assets/icons/jrpg-v1/64/guild.png",
       srcSet: "/assets/icons/jrpg-v1/64/guild.png 1x",
     });
-  });
-});
-
-describe("RankBadge", () => {
-  it("shows the rank insignia with screen-reader text and data-rank", () => {
-    const view = render(<RankBadge rank="B" />);
-    const badge = view.container.querySelector('[data-rank="B"]');
-
-    expect(badge).not.toBeNull();
-    expect(badge).toHaveTextContent("등급 B");
-    expect(badge?.querySelector(".sr-only")?.textContent).toBe("등급 B");
-    expect(badge?.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/rank-b.png",
-    );
-    expect(badge?.querySelector("img")).toHaveAttribute("aria-hidden", "true");
-  });
-
-  it("falls back to rank-none when the quest has no rank", () => {
-    for (const rank of [null, undefined]) {
-      const view = render(<RankBadge rank={rank} />);
-      const badge = view.container.querySelector('[data-rank="none"]');
-
-      expect(badge).not.toBeNull();
-      expect(badge).toHaveTextContent(ko.quest.rankNone);
-      expect(badge?.querySelector("img")?.getAttribute("src")).toBe(
-        "/assets/icons/jrpg-v1/32/rank-none.png",
-      );
-      view.unmount();
-    }
-  });
-
-  it("supports the 64px size", () => {
-    const view = render(<RankBadge rank="S" size={64} className="ml-2" />);
-    const img = view.container.querySelector("img");
-
-    expect(img).toHaveAttribute("width", "64");
-    expect(img?.getAttribute("src")).toBe("/assets/icons/jrpg-v1/64/rank-s.png");
-    expect(view.container.querySelector('[data-rank="S"]')?.className).toContain(
-      "ml-2",
-    );
   });
 });
 
@@ -406,6 +367,19 @@ describe("ThemeMenu", () => {
   });
 });
 
+describe("density tokens", () => {
+  it("sets the page body to 14px text on a 1.5 line height", () => {
+    const css = readFileSync(
+      new URL("../src/index.css", import.meta.url),
+      "utf8",
+    );
+    const bodyBlock = /body\s*\{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
+
+    expect(bodyBlock).toContain("font-size: 14px");
+    expect(bodyBlock).toContain("line-height: 1.5");
+  });
+});
+
 describe("UI atoms", () => {
   it("Button defaults to type=button and the secondary variant", () => {
     const view = render(<Button>저장</Button>);
@@ -415,8 +389,9 @@ describe("UI atoms", () => {
     expect(button.className).toContain("bg-paper");
     expect(button.className).toContain("text-ink");
     expect(button.className).toContain("border-line-strong");
-    expect(button.className).toContain("h-8");
-    expect(button.className).toContain("px-3");
+    expect(button.className).toContain("h-7");
+    expect(button.className).toContain("px-2.5");
+    expect(button.className).toContain("text-[13px]");
     expect(button.className).not.toContain("shadow");
   });
 
@@ -452,11 +427,10 @@ describe("UI atoms", () => {
     expect(view.getByRole("button", { name: "대기" })).toBeDisabled();
   });
 
-  it("Button renders a 32px icon on md and omits it on sm", () => {
+  it("Button never renders an icon, even when the legacy prop is passed", () => {
     const md = render(<Button icon="add">추가</Button>);
-    expect(md.container.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/add.png",
-    );
+    expect(md.container.querySelector("img")).toBeNull();
+    expect(md.getByRole("button", { name: "추가" }).className).toContain("h-7");
     md.unmount();
 
     const sm = render(
@@ -494,6 +468,9 @@ describe("UI atoms", () => {
     expect(input.className).toContain("bg-paper");
     expect(input.className).toContain("border-line-strong");
     expect(input.className).toContain("placeholder:text-muted");
+    expect(input.className).toContain("h-7");
+    expect(input.className).toContain("px-2");
+    expect(input.className).toContain("text-[13px]");
   });
 
   it("TextArea forwards its ref, defaults to four rows and forwards props", () => {
@@ -515,6 +492,8 @@ describe("UI atoms", () => {
     expect(textarea).toHaveAttribute("placeholder", "지금 어떤 상황인가요?");
     expect(textarea.className).toContain("bg-paper");
     expect(textarea.className).toContain("border-line-strong");
+    expect(textarea.className).toContain("text-[13px]");
+    expect(textarea.className).not.toContain("h-7");
   });
 
   it("Chip keeps icons out and removes through a labelled text button", async () => {

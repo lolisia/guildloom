@@ -1,6 +1,6 @@
 /**
- * Quest stages and rank constants shared by the server, the web client and
- * agents. These are the canonical orderings used throughout guildloom.
+ * Quest stages, kinds and rank constants shared by the server, the web client
+ * and agents. These are the canonical orderings used throughout guildloom.
  */
 
 /** All quest stages, in board/progression order. */
@@ -19,25 +19,20 @@ export type Stage = (typeof STAGES)[number];
 /** Stages rendered as columns on the main board. */
 export const BOARD_COLUMNS = ["board", "dungeon", "boss", "cleared"] as const;
 
+/** How a quest came in: a bug fix or a new feature. */
+export const QUEST_KINDS = ["fix", "feature"] as const;
+
+/** A quest kind. */
+export type QuestKind = (typeof QUEST_KINDS)[number];
+
 /** Quest ranks, easiest (F) to hardest (S). */
 export const RANKS = ["F", "E", "D", "C", "B", "A", "S"] as const;
 
 /** A quest rank. */
 export type Rank = (typeof RANKS)[number];
 
-/** Base XP awarded for clearing a quest of each rank. */
-export const RANK_XP = {
-  F: 10,
-  E: 20,
-  D: 40,
-  C: 80,
-  B: 150,
-  A: 250,
-  S: 400,
-} as const satisfies Record<Rank, number>;
-
-/** Rank used when a quest has none (bounty and XP are always computed). */
-export const DEFAULT_RANK = "D" as const satisfies Rank;
+/** XP granted for clearing any quest; also the base of every bounty. */
+export const BASE_CLEAR_XP = 40;
 
 /** Party roles within a quest. The first active member becomes the leader. */
 export const PARTY_ROLES = ["leader", "member"] as const;
@@ -83,8 +78,8 @@ export const NOMINATION_STATES = [
 /** A nomination state. */
 export type NominationState = (typeof NOMINATION_STATES)[number];
 
-/** In-app notification types. */
-export const NOTIFICATION_TYPES = [
+/** In-app notification types that existed before F1. */
+const LEGACY_NOTIFICATION_TYPES = [
   "nominated",
   "relayed",
   "reinforce",
@@ -93,11 +88,33 @@ export const NOTIFICATION_TYPES = [
   "quest_cleared",
 ] as const;
 
+/** A notification type shipped before F1. */
+export type LegacyNotificationType =
+  (typeof LEGACY_NOTIFICATION_TYPES)[number];
+
+/** Notification types added in F1. */
+export const F1_NOTIFICATION_TYPES = ["clear_revoked"] as const;
+
+/** An F1 notification type. */
+export type F1NotificationType = (typeof F1_NOTIFICATION_TYPES)[number];
+
+/**
+ * Every in-app notification type.
+ *
+ * This tuple is the single source of truth: `notificationTypeSchema`, the
+ * `notifications.type` column and the web copy switch all derive from it, so
+ * a new type is added here once.
+ */
+export const NOTIFICATION_TYPES = [
+  ...LEGACY_NOTIFICATION_TYPES,
+  ...F1_NOTIFICATION_TYPES,
+] as const;
+
 /** A notification type. */
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 /** Reasons recorded in the XP ledger. */
-export const XP_REASONS = ["clear", "requester", "guide"] as const;
+export const XP_REASONS = ["clear", "requester", "guide", "revoke"] as const;
 
 /** An XP ledger reason. */
 export type XpReason = (typeof XP_REASONS)[number];

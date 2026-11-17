@@ -20,11 +20,9 @@ import {
   nominateRequestSchema,
   nominationListResponseSchema,
   passNominationRequestSchema,
-  questSchema,
   type ActiveMemberStatus,
   type MyNomination,
   type Nomination,
-  type Quest,
   type UserRef,
 } from "@guildloom/shared";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
@@ -58,7 +56,11 @@ import {
 } from "../lib/party.js";
 import type { Realtime, XpChangedInput } from "../lib/realtime.js";
 import { awardXp } from "../lib/xp.js";
-import { loadQuestView } from "./quests.js";
+import {
+  loadQuestDetail,
+  questDetailResponseSchema,
+  type QuestDetail,
+} from "./quests.js";
 
 /** Numeric route parameters (`:id`). */
 const questParamsSchema = z.object({
@@ -827,8 +829,8 @@ function listMyNominations(db: AppDb, actor: UserRow): MyNomination[] {
 }
 
 /** Load a quest's detail view after a committed mutation. */
-function detail(db: AppDb, questId: number): Quest {
-  return loadQuestView(db, questId);
+function detail(db: AppDb, questId: number): QuestDetail {
+  return loadQuestDetail(db, questId);
 }
 
 export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
@@ -903,7 +905,7 @@ export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         params: nominationParamsSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -936,7 +938,7 @@ export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: nominationParamsSchema,
         body: passNominationRequestSchema.optional(),
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1004,7 +1006,7 @@ export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
     {
       schema: {
         params: questParamsSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1030,7 +1032,7 @@ export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: leavePartyRequestSchema.optional(),
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },
@@ -1065,7 +1067,7 @@ export const partyRoutes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         params: questParamsSchema,
         body: memberStatusRequestSchema,
-        response: { 200: questSchema },
+        response: { 200: questDetailResponseSchema },
       },
       preHandler: authenticate,
     },

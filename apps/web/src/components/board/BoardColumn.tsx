@@ -3,8 +3,8 @@
  * quest cards. The board column doubles as the droppable target when it is
  * empty, so cards can always be moved there.
  *
- * The header follows DESIGN.md: 32px stage icon, Galmuri11 title/count and a
- * 2px underline in the stage colour (board=ink, dungeon=teal, boss=brick,
+ * The header follows DESIGN.md: 32px stage icon, Galmuri11 12px title/count
+ * and a 2px underline in the stage colour (board=ink, dungeon=teal, boss=brick,
  * cleared=gold).
  */
 import { useDroppable } from "@dnd-kit/core";
@@ -58,7 +58,7 @@ export function BoardColumn({
         className={`flex items-center gap-2 border-b-2 pb-2 ${STAGE_UNDERLINE[stage]}`}
       >
         <Icon name={STAGE_ICON[stage]} size={32} />
-        <h2 className="min-w-0 truncate font-pixel text-[16px] text-ink">
+        <h2 className="min-w-0 truncate font-pixel text-[12px] text-ink">
           {ko.board.columns[stage]}
         </h2>
         <span className="ml-auto shrink-0 font-pixel text-[12px] text-muted">

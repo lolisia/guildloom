@@ -217,8 +217,8 @@ describe("InvitePage", () => {
       await screen.findByText(ko.invite.signupTitle),
     ).toBeInTheDocument();
 
-    // The invite screen has the 64px invite header, a paper panel and the
-    // invite/key icons on the signup controls.
+    // The invite screen has the 64px invite header, a paper panel and the key
+    // icon on the password field. Buttons carry text only.
     const headerIcon = view.container.querySelector(
       'img[src$="/64/invite.png"]',
     );
@@ -230,9 +230,7 @@ describe("InvitePage", () => {
     );
     const signup = screen.getByRole("button", { name: ko.invite.signup });
     expect(signup).toHaveAttribute("type", "submit");
-    expect(signup.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/invite.png",
-    );
+    expect(signup.querySelector("img")).toBeNull();
     expect(
       screen
         .getByLabelText(ko.invite.password)
@@ -375,9 +373,7 @@ describe("InvitePage", () => {
       name: ko.invite.join,
     });
     expect(joinButton).toHaveAttribute("type", "button");
-    expect(joinButton.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/login.png",
-    );
+    expect(joinButton.querySelector("img")).toBeNull();
     expect(screen.queryByLabelText(ko.invite.password)).toBeNull();
 
     await view.user.click(joinButton);

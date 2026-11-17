@@ -1,24 +1,29 @@
 /**
  * The quest's adventure log ("모험 기록").
  *
- * Segments come straight from the shared `renderEvent`, so the board, the
- * drawer and later surfaces always produce the same Korean sentences. Actor /
- * quest / stage segments are styled by kind, each entry shows its local
- * timestamp, and a 32px pack icon on the left names the kind of event at a
- * glance.
+ * The section is collapsed by default: only the three most recent key events
+ * (notifications-worthy moments from `isKeyEvent`) are listed, one line each
+ * with its local timestamp. "전체 기록 보기 (N)" toggles the full history;
+ * the expanded state is local to the drawer and resets when it closes.
+ *
+ * With no key events the collapsed view stands in a one-line
+ * "아직 큰 사건은 없습니다" note instead of an empty list. Expanding the
+ * history always replaces that note with every recorded event, key or not.
+ *
+ * Sentences come from the shared `renderEvent`, so the board and the drawer
+ * always produce the same Korean copy.
  */
 import {
+  isKeyEvent,
   renderEvent,
   type EventRenderContext,
   type QuestEvent,
   type SegmentKind,
-  type Stage,
 } from "@guildloom/shared";
+import { useState } from "react";
 
 import { ko } from "../../i18n/ko";
-import { STAGE_ICON, type IconName } from "../../lib/icons";
 import { formatKoreanDateTime } from "../../lib/format";
-import Icon from "../Icon";
 
 /** M1 has no familiar directory yet; fall back to the familiar's sequence id. */
 const EVENT_CONTEXT: EventRenderContext = {
@@ -32,39 +37,8 @@ const SEGMENT_CLASSES: Record<SegmentKind, string> = {
   text: "text-muted",
 };
 
-/** Icon for every event type except `quest_moved`, which follows its target. */
-const EVENT_ICON: Record<QuestEvent["type"], IconName> = {
-  quest_posted: "quest",
-  quest_edited: "edit",
-  quest_moved: "arrow-right",
-  quest_archived: "dropped",
-  nominated: "nominate",
-  reinforcement_requested: "reinforce",
-  claimed: "accept",
-  passed: "pass",
-  relayed: "relay",
-  member_joined: "joined",
-  member_left: "retreated",
-  member_status_changed: "fighting",
-  leader_changed: "party",
-  floor_added: "floor",
-  floor_checked: "floor",
-  boss_engaged: "boss",
-  retry_requested: "refresh",
-  quest_cleared: "cleared",
-};
-
-/** Icon shown to the left of an event row. */
-export function eventIcon(event: QuestEvent): IconName {
-  if (event.type === "quest_moved") {
-    const payload = event.payload as { to?: Stage } | null | undefined;
-    // A missing target falls back to the board icon; an unknown event type or
-    // stage keeps the neutral arrow instead of losing the row.
-    return STAGE_ICON[payload?.to ?? "board"] ?? "arrow-right";
-  }
-
-  return EVENT_ICON[event.type] ?? "arrow-right";
-}
+/** How many key events stay visible while the history is collapsed. */
+export const COLLAPSED_KEY_EVENT_LIMIT = 3;
 
 /** Props for {@link EventTimeline}. */
 export interface EventTimelineProps {
@@ -79,6 +53,17 @@ export function EventTimeline({
   isPending = false,
   isError = false,
 }: EventTimelineProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const chronological = [...(events ?? [])].sort(
+    (left, right) => left.createdAt - right.createdAt || left.id - right.id,
+  );
+  const keyEvents = chronological.filter((event) => isKeyEvent(event.type));
+  const visible = expanded
+    ? chronological
+    : keyEvents.slice(-COLLAPSED_KEY_EVENT_LIMIT);
+  const total = chronological.length;
+
   return (
     <section aria-label={ko.board.drawer.history} className="space-y-2">
       <h3 className="text-sm font-medium text-muted">
@@ -97,42 +82,50 @@ export function EventTimeline({
         </p>
       ) : null}
 
-      {!isPending && !isError && (events?.length ?? 0) === 0 ? (
-        <p className="text-xs text-muted">{ko.board.drawer.emptyHistory}</p>
+      {!isPending && !isError && !expanded && keyEvents.length === 0 ? (
+        <p className="text-xs text-muted">{ko.board.drawer.keyEventsEmpty}</p>
       ) : null}
 
-      {events && events.length > 0 ? (
-        <ol className="space-y-1.5">
-          {events.map((event) => (
+      {visible.length > 0 ? (
+        <ol className="space-y-1">
+          {visible.map((event) => (
             <li
               key={event.id}
               data-event-id={event.id}
               data-event-type={event.type}
-              className="flex items-start gap-2 rounded-sm border border-line bg-paper px-2.5 py-2"
+              className="flex items-baseline justify-between gap-2 rounded-sm border border-line bg-paper px-2.5 py-1.5"
             >
-              <Icon name={eventIcon(event)} size={32} className="mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs leading-relaxed">
-                  {renderEvent(event, EVENT_CONTEXT).map((segment, index) => (
-                    <span
-                      key={`${event.id}-${index}`}
-                      data-segment={segment.kind}
-                      className={SEGMENT_CLASSES[segment.kind]}
-                    >
-                      {segment.text}
-                    </span>
-                  ))}
-                </p>
-                <time
-                  dateTime={new Date(event.createdAt).toISOString()}
-                  className="mt-1 block text-xs text-muted"
-                >
-                  {formatKoreanDateTime(event.createdAt)}
-                </time>
-              </div>
+              <p className="min-w-0 text-xs leading-relaxed">
+                {renderEvent(event, EVENT_CONTEXT).map((segment, index) => (
+                  <span
+                    key={`${event.id}-${index}`}
+                    data-segment={segment.kind}
+                    className={SEGMENT_CLASSES[segment.kind]}
+                  >
+                    {segment.text}
+                  </span>
+                ))}
+              </p>
+              <time
+                dateTime={new Date(event.createdAt).toISOString()}
+                className="shrink-0 text-xs text-muted"
+              >
+                {formatKoreanDateTime(event.createdAt)}
+              </time>
             </li>
           ))}
         </ol>
+      ) : null}
+
+      {!isPending && !isError && total > 0 ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+          className="rounded-sm px-1 text-xs font-medium text-teal transition-colors hover:bg-sunken hover:text-ink"
+        >
+          {ko.board.drawer.showAllHistory(total)}
+        </button>
       ) : null}
     </section>
   );

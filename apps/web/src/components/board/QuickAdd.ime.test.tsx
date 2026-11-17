@@ -92,6 +92,7 @@ const CREATED_QUEST: Quest = {
   number: 2,
   title: "인게임",
   stage: "board",
+  kind: "fix",
   rank: null,
   orderKey: "a1",
   tags: [],
@@ -106,7 +107,8 @@ const CREATED_QUEST: Quest = {
   direction: "",
   archiveReason: null,
   nominations: [],
-  floors: [],
+  floors: { done: 0, total: 0 },
+  refs: [],
   firstClaimedAt: null,
 };
 

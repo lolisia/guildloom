@@ -22,6 +22,8 @@ export const queryKeys = {
   quest: (questId: number) => ["quest", questId] as const,
   /** `GET /api/quests/:questId/events` */
   events: (questId: number) => ["events", questId] as const,
+  /** `GET /api/quests/:questId/clear-preview` */
+  clearPreview: (questId: number) => ["clearPreview", questId] as const,
   /** `GET /api/projects/:projectId/tags` */
   tags: (projectId: number, q = "") => ["tags", projectId, q] as const,
   /** `GET /api/projects/:projectId/invites` */

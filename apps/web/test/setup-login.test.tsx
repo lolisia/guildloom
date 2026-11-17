@@ -263,9 +263,7 @@ describe("SetupPage", () => {
     expect(panel?.parentElement).toHaveClass("bg-ground");
     const submit = screen.getByRole("button", { name: ko.setup.submit });
     expect(submit).toHaveAttribute("type", "submit");
-    expect(submit.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/guild.png",
-    );
+    expect(submit.querySelector("img")).toBeNull();
     expect(
       screen
         .getByLabelText(ko.setup.password)
@@ -394,8 +392,8 @@ describe("LoginPage", () => {
 
     await screen.findByLabelText(ko.login.loginId);
 
-    // Login uses the login icon in the header and on the submit button, and
-    // the password field carries the key icon.
+    // Login uses the login icon in the header and the key icon on the password
+    // field; the submit button is text only.
     const headerIcon = view.container.querySelector('img[src$="/64/login.png"]');
     expect(headerIcon).toHaveAttribute("width", "64");
     expect(headerIcon?.closest("section")).toHaveClass(
@@ -404,9 +402,7 @@ describe("LoginPage", () => {
     );
     const submit = screen.getByRole("button", { name: ko.login.submit });
     expect(submit).toHaveAttribute("type", "submit");
-    expect(submit.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/login.png",
-    );
+    expect(submit.querySelector("img")).toBeNull();
     expect(
       screen
         .getByLabelText(ko.login.password)

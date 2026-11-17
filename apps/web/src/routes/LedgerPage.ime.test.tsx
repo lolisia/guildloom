@@ -90,6 +90,7 @@ const SUMMARY: QuestSummary = {
   number: 1,
   title: "Alpha",
   stage: "board",
+  kind: "fix",
   rank: null,
   orderKey: "a0",
   tags: [],
@@ -118,15 +119,8 @@ const QUEST: Quest = {
     },
   ],
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 상황",
-      orderKey: "a0",
-      doneAt: Date.UTC(2026, 0, 4, 3, 0, 0),
-      doneBy: { id: 1, displayName: "김모험" },
-    },
-  ],
+  floors: { done: 1, total: 1 },
+  refs: [],
   firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 

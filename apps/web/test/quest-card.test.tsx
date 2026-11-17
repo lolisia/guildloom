@@ -58,6 +58,7 @@ const BASE_QUEST: QuestSummary = {
   number: 7,
   title: "보드 첫 의뢰",
   stage: "board",
+  kind: "fix",
   rank: "B",
   orderKey: "a0",
   tags: ["긴급"],
@@ -197,15 +198,13 @@ describe("QuestCard M2a data", () => {
 
     for (const item of Array.from(items)) {
       const avatar = item.querySelector("[data-user-id]");
-      expect(avatar).toHaveClass("h-8", "w-8");
+      expect(avatar).toHaveClass("h-6", "w-6");
     }
 
     const leader = card.querySelector('[data-party-role="leader"]');
     expect(leader).not.toBeNull();
     expect(leader).toHaveTextContent(ko.quest.partyLeader);
-    const leaderIcon = leader?.querySelector('img[src$="/party.png"]');
-    expect(leaderIcon).toHaveAttribute("width", "32");
-    expect(leaderIcon).toHaveAttribute("height", "32");
+    expect(leader?.querySelector("img")).toBeNull();
 
     const fighting = card.querySelector('[data-party-status="fighting"]');
     const done = card.querySelector('[data-party-status="done"]');
@@ -233,10 +232,7 @@ describe("QuestCard M2a data", () => {
       "font-pixel",
       "text-[12px]",
     );
-    expect(card.querySelector('img[src$="/floor.png"]')).toHaveAttribute(
-      "width",
-      "32",
-    );
+    expect(card.querySelector("img")).toBeNull();
 
     const bar = within(card).getByRole("progressbar");
     expect(bar).toHaveAttribute("aria-valuenow", "2");
@@ -283,10 +279,7 @@ describe("QuestCard M2a data", () => {
 
     const total = within(card).getByText("300");
     expect(total).toHaveClass("font-pixel", "text-[12px]", "text-gold");
-    expect(card.querySelector('img[src$="/bounty.png"]')).toHaveAttribute(
-      "width",
-      "32",
-    );
+    expect(card.querySelector("img")).toBeNull();
 
     const multiplier = within(card).getByText("×1.2");
     expect(multiplier).toHaveClass("font-pixel", "text-gold");
@@ -299,19 +292,16 @@ describe("QuestCard M2a data", () => {
     expect(within(card).getByText("150")).toHaveClass("text-gold");
   });
 
-  it("shows the pending nomination count with the pending icon", () => {
+  it("shows the pending nomination count without an icon", () => {
     const { card } = renderCard(quest({ pendingNominations: 2 }));
 
     const badge = card.querySelector('[data-pending-nominations="2"]');
     expect(badge).not.toBeNull();
     expect(badge).toHaveTextContent(`${ko.quest.pendingNominations} 2`);
-    expect(badge?.querySelector('img[src$="/pending.png"]')).toHaveAttribute(
-      "width",
-      "32",
-    );
+    expect(badge?.querySelector("img")).toBeNull();
   });
 
-  it("desaturates dusty cards and marks them with the faded icon", () => {
+  it("desaturates dusty cards and announces them without the faded icon", () => {
     const { card } = renderCard(
       quest({
         bounty: {
@@ -327,9 +317,8 @@ describe("QuestCard M2a data", () => {
     expect(card).toHaveAttribute("data-dusty", "true");
     expect(card).toHaveClass("saturate-50");
 
-    const faded = card.querySelector('img[src$="/faded.png"]');
-    expect(faded).toHaveAttribute("width", "32");
-    expect(faded).toHaveAttribute("alt", ko.quest.dusty);
+    expect(card.querySelector('img[src$="/faded.png"]')).toBeNull();
+    expect(within(card).getByText(ko.quest.dusty)).toHaveClass("sr-only");
   });
 
   it("keeps fresh cards saturated and free of the faded icon", () => {
@@ -393,19 +382,21 @@ describe("QuestCard M2a data", () => {
     const { card } = renderCard(quest({ id: 2, stage: "dungeon", party: [] }));
 
     expect(within(card).queryByTestId("empty-party")).toBeNull();
-    expect(card.querySelector('[data-user-id="1"]')).toHaveClass("h-8", "w-8");
+    expect(card.querySelector('[data-user-id="1"]')).toHaveClass("h-6", "w-6");
   });
 
-  it("still opens the quest when clicked", () => {
+  it("still opens the quest when clicked and never shows a rank", () => {
     const { card, onOpen } = renderCard(quest());
 
     expect(card).toHaveAttribute("role", "button");
     expect(card).toHaveAttribute("aria-label", "#7 보드 첫 의뢰");
+    expect(card.querySelector("[data-rank]")).toBeNull();
+    expect(within(card).queryByText(/등급/)).toBeNull();
     fireEvent.click(card);
     expect(onOpen).toHaveBeenCalledWith(1);
   });
 
-  it("uses only 32px pack icons and no emoji", () => {
+  it("keeps the card body free of icon images and emoji", () => {
     const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu;
     const { card } = renderCard(
       quest({
@@ -429,19 +420,18 @@ describe("QuestCard M2a data", () => {
       }),
     );
 
-    const icons = Array.from(card.querySelectorAll("img"));
-    expect(icons.length).toBeGreaterThan(0);
-    for (const icon of icons) {
-      expect(icon).toHaveAttribute("width", "32");
-      expect(icon).toHaveAttribute("height", "32");
-      expect(icon.getAttribute("src")).toMatch(
-        /^\/assets\/icons\/jrpg-v1\/32\//,
-      );
-    }
-
+    expect(card.querySelectorAll("img")).toHaveLength(0);
     expect(card.textContent?.match(emoji)).toBeNull();
-    expect(card.querySelector('[data-pending-nominations="1"]')).not.toBeNull();
-    expect(card.querySelector('img[src$="/faded.png"]')).not.toBeNull();
-    expect(card.querySelector('img[src$="/party.png"]')).not.toBeNull();
+  });
+
+  it("shows the 신규 chip only for feature requests", () => {
+    const { card: fixCard } = renderCard(quest({ kind: "fix" }));
+    expect(fixCard.querySelector("[data-kind]")).toBeNull();
+    expect(within(fixCard).queryByText(ko.quest.kinds.feature)).toBeNull();
+
+    const { card: featureCard } = renderCard(quest({ kind: "feature" }));
+    const chip = featureCard.querySelector('[data-kind="feature"]');
+    expect(chip).toHaveTextContent(ko.quest.kinds.feature);
+    expect(chip).toHaveClass("border", "border-line", "text-[12px]");
   });
 });

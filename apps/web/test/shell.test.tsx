@@ -515,11 +515,20 @@ describe("TabBar", () => {
     expect(header.className).not.toContain("backdrop");
     expect(header.textContent).not.toContain("⚔");
 
+    const bar = header.firstElementChild as HTMLElement;
+    expect(bar).toHaveClass("h-11", "items-center");
+
+    const main = view.container.querySelector("main") as HTMLElement;
+    expect(main).toHaveClass("p-4");
+
     const logo = within(header).getByRole("link", {
       name: ko.common.appName,
     });
     expect(logo.className).toContain("font-pixel");
     expect(logo.className).toContain("text-[16px]");
+    expect(logo.querySelector("img")?.getAttribute("src")).toBe(
+      "/assets/icons/jrpg-v1/32/guild.png",
+    );
 
     const views = view.getByRole("navigation", { name: ko.tabs.viewToggle });
     const board = within(views).getByRole("link", { name: ko.tabs.board });
@@ -536,17 +545,8 @@ describe("TabBar", () => {
     expect(ledger.className).toContain("hover:bg-sunken");
     expect(settings.className).not.toContain("border-");
 
-    const icons: Array<[HTMLElement, string]> = [
-      [board, "board"],
-      [ledger, "ledger"],
-      [settings, "settings"],
-    ];
-    for (const [link, iconName] of icons) {
-      const image = link.querySelector("img");
-      expect(image?.getAttribute("src")).toBe(
-        `/assets/icons/jrpg-v1/32/${iconName}.png`,
-      );
-      expect(image).toHaveAttribute("width", "32");
+    for (const link of [board, ledger, settings]) {
+      expect(link.querySelector("img")).toBeNull();
     }
 
     expect(within(board).getByText(ko.tabs.board)).toBeInTheDocument();
@@ -554,12 +554,10 @@ describe("TabBar", () => {
     expect(within(settings).getByText(ko.tabs.settings)).toBeInTheDocument();
 
     const create = view.getByRole("button", { name: ko.tabs.createGuild });
-    expect(create.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/add.png",
-    );
+    expect(create.querySelector("img")).toBeNull();
   });
 
-  it("renders the theme menu and a ghost logout with the logout icon", async () => {
+  it("renders the theme menu and an icon-free ghost logout", async () => {
     const view = renderApp("/g/1", { me: HERO });
     await view.findByRole("link", { name: "달빛 길드" });
 
@@ -573,9 +571,7 @@ describe("TabBar", () => {
     });
     expect(logoutButton.className).toContain("hover:bg-sunken");
     expect(logoutButton.className).not.toContain("border-line-strong");
-    expect(logoutButton.querySelector("img")?.getAttribute("src")).toBe(
-      "/assets/icons/jrpg-v1/32/logout.png",
-    );
+    expect(logoutButton.querySelector("img")).toBeNull();
   });
 
   it("renders the project-load error and retry as separate flex items", async () => {
@@ -988,16 +984,17 @@ describe("ko copy", () => {
     expect(ko.ledger.columns).toEqual({
       number: "번호",
       title: "제목",
+      kind: "종류",
       tags: "태그",
       party: "파티",
       bounty: "현상금",
       floors: "층",
       stage: "단계",
-      rank: "등급",
       createdBy: "작성자",
       createdAt: "등록일",
       updatedAt: "수정일",
     });
+    expect(ko.ledger.columns).not.toHaveProperty("rank");
   });
 
   it("contains the exact drawer labels and bulk confirm template", () => {

@@ -91,6 +91,7 @@ const QUEST_DETAIL: Quest = {
   number: 1,
   title: "Alpha",
   stage: "board",
+  kind: "fix",
   rank: "C",
   orderKey: "a0",
   tags: [],
@@ -113,15 +114,8 @@ const QUEST_DETAIL: Quest = {
   direction: "방향",
   archiveReason: null,
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 상황",
-      orderKey: "a0",
-      doneAt: null,
-      doneBy: null,
-    },
-  ],
+  floors: { done: 0, total: 0 },
+  refs: [],
   firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 
@@ -293,7 +287,7 @@ describe("QuestDrawer tags", () => {
     const { user } = renderDrawer();
 
     await screen.findByDisplayValue("Alpha");
-    await screen.findByText(ko.board.drawer.emptyHistory);
+    await screen.findByText(ko.board.drawer.keyEventsEmpty);
     await waitFor(() => expect(getEventsRequestCount()).toBe(1));
 
     const tagInput = screen.getByRole("textbox", { name: ko.quest.tagAdd });
@@ -311,7 +305,12 @@ describe("QuestDrawer tags", () => {
 
     // The mounted adventure log refetches as soon as the PATCH settles …
     await waitFor(() => expect(getEventsRequestCount()).toBe(2));
-    // … and renders the new `quest_edited` sentence from that response.
+    // … and the collapsed log hides non-key edits until the full history opens.
+    await user.click(
+      screen.getByRole("button", {
+        name: ko.board.drawer.showAllHistory(1),
+      }),
+    );
     expect(
       await screen.findByText(/의뢰 내용을 고쳤습니다 \(태그\)/),
     ).toBeInTheDocument();

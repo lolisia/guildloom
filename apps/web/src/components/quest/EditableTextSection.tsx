@@ -6,6 +6,7 @@
  * `TextArea`, which saves on blur (`Escape` cancels the edit).
  */
 import { useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { ko } from "../../i18n/ko";
 import { tokenizeLinks } from "../../lib/format";
@@ -21,10 +22,12 @@ export interface EditableTextSectionProps {
   emptyText: string;
   onSave: (next: string) => void;
   disabled?: boolean;
+  /** Custom renderer for the read-only value (defaults to linkified text). */
+  renderRead?: (value: string) => ReactNode;
 }
 
 /** Render stored text with newlines preserved and URLs linkified. */
-function LinkifiedText({ text }: { text: string }) {
+export function LinkifiedText({ text }: { text: string }) {
   return (
     <>
       {tokenizeLinks(text).map((token, index) =>
@@ -55,6 +58,7 @@ export function EditableTextSection({
   emptyText,
   onSave,
   disabled = false,
+  renderRead,
 }: EditableTextSectionProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -125,7 +129,7 @@ export function EditableTextSection({
         />
       ) : value.trim().length > 0 ? (
         <div className="whitespace-pre-wrap break-words rounded-sm border border-line bg-sunken px-2.5 py-2 text-sm leading-relaxed text-ink">
-          <LinkifiedText text={value} />
+          {renderRead ? renderRead(value) : <LinkifiedText text={value} />}
         </div>
       ) : (
         <p className="rounded-sm border border-line bg-sunken px-2.5 py-2 text-xs text-muted">

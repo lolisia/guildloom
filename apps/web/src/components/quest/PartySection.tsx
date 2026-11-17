@@ -39,10 +39,8 @@ import {
   status as setMemberStatus,
 } from "../../api/party";
 import { ko } from "../../i18n/ko";
-import { PARTY_STATUS_ICON } from "../../lib/icons";
 import { queryKeys } from "../../lib/queryKeys";
 import AdventurerSprite from "../AdventurerSprite";
-import Icon from "../Icon";
 import PassReasonDialog from "../PassReasonDialog";
 import { Button, TextInput } from "../ui";
 import NominationPopover from "./NominationPopover";
@@ -58,15 +56,14 @@ export interface PartySectionProps {
   quest: Quest;
 }
 
-/** Status icon plus Korean label for one party member. */
+/** Korean label for one party member clear status. */
 function MemberStatusChip({ status }: { status: MemberStatus }) {
   return (
     <span
       data-party-status-chip={status}
       aria-label={`${ko.party.statusChip} ${MEMBER_STATUS_LABELS[status]}`}
-      className="inline-flex items-center gap-1 rounded-sm border border-line px-1 text-xs text-muted"
+      className="inline-flex items-center rounded-sm border border-line px-1 text-xs text-muted"
     >
-      <Icon name={PARTY_STATUS_ICON[status]} size={32} />
       <span>{MEMBER_STATUS_LABELS[status]}</span>
     </span>
   );
@@ -306,7 +303,7 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
               <AdventurerSprite
                 userId={member.user.id}
                 displayName={member.user.displayName}
-                size="sm"
+                size="md"
               />
               <span className="text-sm font-medium text-ink">
                 {member.user.displayName}
@@ -314,9 +311,8 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
               {member.role === "leader" ? (
                 <span
                   data-party-leader="true"
-                  className="inline-flex items-center gap-0.5 text-[12px] font-medium text-ink"
+                  className="inline-flex items-center text-[12px] font-medium text-ink"
                 >
-                  <Icon name="party" size={32} />
                   {ko.quest.partyLeader}
                 </span>
               ) : null}
@@ -348,7 +344,7 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
                 <AdventurerSprite
                   userId={member.user.id}
                   displayName={member.user.displayName}
-                  size="sm"
+                  size="md"
                 />
                 <span className="text-ink">{member.user.displayName}</span>
                 <span>{MEMBER_STATUS_LABELS.retreated}</span>
@@ -412,7 +408,6 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
             <>
               <Button
                 variant="primary"
-                icon="accept"
                 disabled={acceptMutation.isPending}
                 onClick={() => acceptMutation.mutate(myPendingNomination.id)}
               >
@@ -421,7 +416,6 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
                   : ko.party.accept}
               </Button>
               <Button
-                icon="pass"
                 onClick={() => setPassTarget(myPendingNomination)}
               >
                 {ko.party.pass}
@@ -446,7 +440,6 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
               })}
               <Button
                 variant="danger"
-                icon="retreated"
                 disabled={leaveMutation.isPending}
                 onClick={() => {
                   leaveMutation.reset();
@@ -459,7 +452,6 @@ export function PartySection({ projectId, quest }: PartySectionProps) {
           ) : (
             <Button
               variant="primary"
-              icon="accept"
               disabled={joinMutation.isPending}
               onClick={() => joinMutation.mutate()}
             >

@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  NOTIFICATION_TYPES,
+  QUEST_KINDS,
   RANKS,
   STAGES,
-  addFloorsRequestSchema,
+  XP_REASONS,
+  appendChecklistRequestSchema,
   bulkCreateQuestsRequestSchema,
+  clearPreviewResponseSchema,
   clearQuestResponseSchema,
+  createQuestRefRequestSchema,
   createQuestRequestSchema,
   displayNameSchema,
-  floorListResponseSchema,
   guildNameSchema,
   leavePartyRequestSchema,
   loginIdSchema,
   memberStatusRequestSchema,
-  moveFloorRequestSchema,
   myNominationSchema,
   myNominationsResponseSchema,
   nominateRequestSchema,
@@ -22,26 +25,31 @@ import {
   notificationListQuerySchema,
   notificationListResponseSchema,
   notificationSchema,
+  notificationTypeSchema,
   passNominationRequestSchema,
   passwordSchema,
   questEventSchema,
   questEventsResponseSchema,
+  questKindSchema,
+  questRefSchema,
   questSchema,
   questSummarySchema,
   rankSchema,
   readNotificationsRequestSchema,
+  refKind,
   retryQuestRequestSchema,
   stageSchema,
-  updateFloorRequestSchema,
+  toggleChecklistRequestSchema,
   updateQuestRequestSchema,
 } from "../src/index.js";
 
-/** A complete quest detail payload, including the M2 party/floor shapes. */
+/** A complete quest detail payload, including the M2 party/detail shapes. */
 const questDetail = {
   id: 1,
   number: 12,
   title: "로그인 버그",
   stage: "dungeon",
+  kind: "fix",
   rank: "D",
   orderKey: "a0",
   tags: ["버그"],
@@ -51,7 +59,7 @@ const questDetail = {
   pendingNominations: 1,
   projectId: 2,
   situation: "세션 만료 후 빈 화면",
-  direction: "세션 갱신 처리",
+  direction: "- [x] 로그인 재현\n- [ ] 세션 갱신",
   archiveReason: null,
   party: [
     {
@@ -81,20 +89,15 @@ const questDetail = {
       createdAt: 1_700_000_000_200,
     },
   ],
-  floors: [
+  floors: { done: 1, total: 2 },
+  refs: [
     {
-      id: 5,
-      title: "1층: 로그인 재현",
-      orderKey: "a0",
-      doneAt: 1_700_000_000_300,
-      doneBy: { id: 7, displayName: "김철수" },
-    },
-    {
-      id: 6,
-      title: "2층: 세션 갱신",
-      orderKey: "a1",
-      doneAt: null,
-      doneBy: null,
+      id: 3,
+      label: "설계 명세",
+      target: "https://example.com/spec",
+      kind: "url",
+      createdBy: { id: 7, displayName: "김철수" },
+      createdAt: 1_700_000_000_400,
     },
   ],
   bounty: {
@@ -190,6 +193,32 @@ describe("stageSchema and rankSchema", () => {
       true,
     );
   });
+
+  it("accepts fix/feature kinds on create and update", () => {
+    expect(
+      createQuestRequestSchema.parse({ title: "로그인 버그", kind: "feature" })
+        .kind,
+    ).toBe("feature");
+    expect(
+      createQuestRequestSchema.parse({ title: "로그인 버그" }).kind,
+    ).toBeUndefined();
+    expect(
+      createQuestRequestSchema.safeParse({ title: "로그인 버그", kind: "chore" })
+        .success,
+    ).toBe(false);
+    expect(updateQuestRequestSchema.parse({ kind: "fix" }).kind).toBe("fix");
+  });
+});
+
+describe("notification and XP constants", () => {
+  it("adds clear_revoked as a first-class notification type", () => {
+    expect(NOTIFICATION_TYPES).toContain("clear_revoked");
+    expect(notificationTypeSchema.options).toEqual([...NOTIFICATION_TYPES]);
+  });
+
+  it("adds the revoke XP reason while keeping the existing ones", () => {
+    expect(XP_REASONS).toEqual(["clear", "requester", "guide", "revoke"]);
+  });
 });
 
 describe("bulkCreateQuestsRequestSchema", () => {
@@ -238,6 +267,7 @@ describe("questSummarySchema", () => {
     number: 12,
     title: "로그인 버그",
     stage: "board",
+    kind: "fix",
     rank: null,
     orderKey: "a0",
     tags: ["버그"],
@@ -269,6 +299,7 @@ describe("questSummarySchema", () => {
       "number",
       "title",
       "stage",
+      "kind",
       "rank",
       "orderKey",
       "tags",
@@ -282,16 +313,37 @@ describe("questSummarySchema", () => {
     ]);
   });
 
-  it("parses a quest summary and keeps its shape", () => {
-    const parsed = questSummarySchema.parse(summary);
+  it("parses a quest summary with its required kind", () => {
+    expect(questSummarySchema.parse(summary)).toEqual(summary);
+  });
 
-    expect(parsed).toEqual(summary);
-    expect(Object.keys(parsed)).toEqual(Object.keys(summary));
+  it("requires kind on every summary", () => {
+    const { kind: _kind, ...withoutKind } = summary;
+    expect(questSummarySchema.safeParse(withoutKind).success).toBe(false);
+    expect(
+      questSummarySchema.safeParse({ ...summary, kind: undefined }).success,
+    ).toBe(false);
   });
 
   it("accepts a rank and null", () => {
     expect(questSummarySchema.parse({ ...summary, rank: "S" }).rank).toBe("S");
     expect(questSummarySchema.parse({ ...summary, rank: null }).rank).toBeNull();
+  });
+
+  it("accepts exactly the known quest kinds", () => {
+    expect(questKindSchema.options).toEqual([...QUEST_KINDS]);
+    expect([...QUEST_KINDS]).toEqual(["fix", "feature"]);
+    expect(questSummarySchema.parse(summary).kind).toBe("fix");
+    expect(
+      questSummarySchema.parse({ ...summary, kind: "feature" }).kind,
+    ).toBe("feature");
+    expect(
+      questSummarySchema.safeParse({ ...summary, kind: "chore" }).success,
+    ).toBe(false);
+  });
+
+  it("serializes the required kind in both directions", () => {
+    expect(questSummarySchema.encode(summary)).toEqual(summary);
   });
 
   it("rejects a summary with an invalid stage", () => {
@@ -302,17 +354,63 @@ describe("questSummarySchema", () => {
 });
 
 describe("questSchema", () => {
-  it("overrides the summary party and floors with detail shapes", () => {
+  it("overrides the summary party with the detail shape", () => {
     const parsed = questSchema.parse(questDetail);
 
     expect(parsed).toEqual(questDetail);
     // PartyMember carries the full user ref, not the summary's flat fields.
     expect(parsed.party[0]?.user.displayName).toBe("김철수");
     expect(parsed.party[1]?.retreatReason).toBe("담당자가 아님");
-    expect(parsed.floors[0]?.doneBy?.id).toBe(7);
-    expect(parsed.floors[1]?.doneAt).toBeNull();
+    expect(parsed.floors).toEqual({ done: 1, total: 2 });
     expect(parsed.nominations[0]?.nominee.id).toBe(9);
     expect(parsed.firstClaimedAt).toBe(1_700_000_000_000);
+  });
+
+  it("accepts only the checklist { done, total } progress", () => {
+    expect(
+      questSchema.parse({ ...questDetail, floors: { done: 0, total: 0 } })
+        .floors,
+    ).toEqual({ done: 0, total: 0 });
+
+    // The retired dungeon floor rows are rejected: an empty array no longer
+    // parses, and neither does a row array.
+    expect(
+      questSchema.safeParse({ ...questDetail, floors: [] }).success,
+    ).toBe(false);
+    expect(
+      questSchema.safeParse({
+        ...questDetail,
+        floors: [
+          {
+            id: 5,
+            title: "1층: 로그인 재현",
+            orderKey: "a0",
+            doneAt: null,
+            doneBy: null,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      questSchema.safeParse({ ...questDetail, floors: [{ done: 1, total: 2 }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires kind and refs while accepting explicit values", () => {
+    const feature = questSchema.parse({ ...questDetail, kind: "feature" });
+    expect(feature.kind).toBe("feature");
+    expect(feature.refs).toEqual(questDetail.refs);
+
+    const { kind: _kind, ...withoutKind } = questDetail;
+    expect(questSchema.safeParse(withoutKind).success).toBe(false);
+
+    const { refs: _refs, ...withoutRefs } = questDetail;
+    expect(questSchema.safeParse(withoutRefs).success).toBe(false);
+
+    expect(questSchema.parse({ ...questDetail, refs: [] }).refs).toEqual(
+      [],
+    );
   });
 
   it("requires firstClaimedAt and accepts null while unclaimed", () => {
@@ -325,6 +423,10 @@ describe("questSchema", () => {
     expect(questSchema.safeParse(withoutFirstClaim).success).toBe(false);
   });
 
+  it("serializes the F1 detail fields in both directions", () => {
+    expect(questSchema.encode(questDetail)).toEqual(questDetail);
+  });
+
   it("keeps the summary fields and adds the detail-only ones", () => {
     for (const key of Object.keys(questSummarySchema.shape)) {
       expect(questSchema.shape).toHaveProperty(key);
@@ -335,10 +437,130 @@ describe("questSchema", () => {
       "direction",
       "archiveReason",
       "nominations",
+      "refs",
       "firstClaimedAt",
     ]) {
       expect(questSchema.shape).toHaveProperty(key);
     }
+  });
+});
+
+describe("quest refs, checklists and clear preview", () => {
+  const userRef = { id: 7, displayName: "김철수" };
+
+  it("classifies http(s) targets as urls and everything else as paths", () => {
+    expect(refKind("https://example.com/spec")).toBe("url");
+    expect(refKind("HTTP://Example.com/spec")).toBe("url");
+    expect(refKind("  https://example.com/spec  ")).toBe("url");
+    expect(refKind("docs/login.md")).toBe("path");
+    expect(refKind("ftp://example.com/spec")).toBe("path");
+    expect(refKind("")).toBe("path");
+  });
+
+  it("parses a reference document with a nullable label", () => {
+    const ref = {
+      id: 3,
+      label: "설계 명세",
+      target: "https://example.com/spec",
+      kind: "url",
+      createdBy: userRef,
+      createdAt: 1_700_000_000_000,
+    };
+
+    expect(questRefSchema.parse(ref)).toEqual(ref);
+    expect(questRefSchema.parse({ ...ref, label: null }).label).toBeNull();
+    expect(questRefSchema.safeParse({ ...ref, kind: "ftp" }).success).toBe(
+      false,
+    );
+  });
+
+  it("validates reference creation input", () => {
+    expect(
+      createQuestRefRequestSchema.parse({ target: "  docs/a.md  " }),
+    ).toEqual({ target: "docs/a.md" });
+    expect(
+      createQuestRefRequestSchema.parse({
+        label: "  설계 명세  ",
+        target: "https://example.com/spec",
+      }),
+    ).toEqual({ label: "설계 명세", target: "https://example.com/spec" });
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "   " }).success,
+    ).toBe(false);
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "a".repeat(1000) })
+        .success,
+    ).toBe(true);
+    expect(
+      createQuestRefRequestSchema.safeParse({ target: "a".repeat(1001) })
+        .success,
+    ).toBe(false);
+    expect(
+      createQuestRefRequestSchema.safeParse({
+        label: "가".repeat(101),
+        target: "docs/a.md",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates checklist toggle input", () => {
+    expect(
+      toggleChecklistRequestSchema.parse({ done: true, text: "- [ ] a" }),
+    ).toEqual({ done: true, text: "- [ ] a" });
+    expect(toggleChecklistRequestSchema.safeParse({ done: true }).success).toBe(
+      false,
+    );
+    expect(
+      toggleChecklistRequestSchema.safeParse({ done: "yes", text: "" }).success,
+    ).toBe(false);
+  });
+
+  it("caps checklist appends at 50 titles of 200 characters", () => {
+    // Blank titles pass validation and are dropped by appendChecklistItems.
+    expect(
+      appendChecklistRequestSchema.parse({ titles: ["  할 일  ", "   "] }),
+    ).toEqual({ titles: ["  할 일  ", "   "] });
+    expect(
+      appendChecklistRequestSchema.safeParse({
+        titles: Array.from({ length: 50 }, (_, index) => `${index}번`),
+      }).success,
+    ).toBe(true);
+    expect(
+      appendChecklistRequestSchema.safeParse({
+        titles: Array.from({ length: 51 }, (_, index) => `${index}번`),
+      }).success,
+    ).toBe(false);
+    expect(
+      appendChecklistRequestSchema.safeParse({ titles: [] }).success,
+    ).toBe(false);
+    expect(
+      appendChecklistRequestSchema.safeParse({ titles: ["가".repeat(201)] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("parses the clear preview with and without a requester bonus", () => {
+    const preview = {
+      total: 96,
+      rewards: [{ user: userRef, amount: 48 }],
+      requesterBonus: { user: { id: 8, displayName: "이영희" }, amount: 5 },
+      actorIsInvolved: true,
+    };
+
+    expect(clearPreviewResponseSchema.parse(preview)).toEqual(preview);
+    expect(
+      clearPreviewResponseSchema.parse({ ...preview, requesterBonus: null })
+        .requesterBonus,
+    ).toBeNull();
+    expect(
+      clearPreviewResponseSchema.safeParse({ ...preview, total: 1.5 }).success,
+    ).toBe(false);
+    expect(
+      clearPreviewResponseSchema.safeParse({
+        ...preview,
+        actorIsInvolved: "yes",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -401,6 +623,26 @@ describe("nomination and notification schemas", () => {
     expect(parsed.questId).toBeNull();
     expect(parsed.readAt).toBeNull();
   });
+
+  it("accepts the clear_revoked notification", () => {
+    expect(notificationTypeSchema.parse("clear_revoked")).toBe("clear_revoked");
+
+    const parsed = notificationSchema.parse({
+      id: 2,
+      projectId: 2,
+      questId: 12,
+      questNumber: 12,
+      questTitle: "로그인 버그",
+      type: "clear_revoked",
+      actor: ref,
+      payload: { xpRevoked: 48 },
+      createdAt: 1_700_000_000_000,
+      readAt: null,
+    });
+
+    expect(parsed.type).toBe("clear_revoked");
+    expect(parsed.payload).toEqual({ xpRevoked: 48 });
+  });
 });
 
 describe("party request schemas", () => {
@@ -462,45 +704,6 @@ describe("party request schemas", () => {
     );
     expect(
       retryQuestRequestSchema.safeParse({ comment: "가".repeat(501) }).success,
-    ).toBe(false);
-  });
-
-  it("caps floor batches at 50 titles", () => {
-    expect(addFloorsRequestSchema.safeParse({ titles: ["1층"] }).success).toBe(
-      true,
-    );
-    expect(
-      addFloorsRequestSchema.safeParse({
-        titles: Array.from({ length: 50 }, (_, index) => `${index}층`),
-      }).success,
-    ).toBe(true);
-    expect(
-      addFloorsRequestSchema.safeParse({
-        titles: Array.from({ length: 51 }, (_, index) => `${index}층`),
-      }).success,
-    ).toBe(false);
-  });
-
-  it("limits floor titles to 200 characters and allows emptying a patch", () => {
-    expect(
-      updateFloorRequestSchema.safeParse({ title: "가".repeat(200) }).success,
-    ).toBe(true);
-    expect(
-      updateFloorRequestSchema.safeParse({ title: "가".repeat(201) }).success,
-    ).toBe(false);
-    expect(updateFloorRequestSchema.safeParse({ done: true }).success).toBe(
-      true,
-    );
-    expect(updateFloorRequestSchema.safeParse({}).success).toBe(true);
-  });
-
-  it("accepts before/after ids when moving a floor", () => {
-    expect(moveFloorRequestSchema.safeParse({}).success).toBe(true);
-    expect(
-      moveFloorRequestSchema.safeParse({ beforeId: 3, afterId: 4 }).success,
-    ).toBe(true);
-    expect(
-      moveFloorRequestSchema.safeParse({ beforeId: "3" }).success,
     ).toBe(false);
   });
 });
@@ -586,14 +789,7 @@ describe("action response schemas", () => {
     ).toBe(false);
   });
 
-  it("returns floor arrays and my pending nominations", () => {
-    expect(floorListResponseSchema.parse(questDetail.floors)).toEqual(
-      questDetail.floors,
-    );
-    expect(floorListResponseSchema.safeParse({ floors: [] }).success).toBe(
-      false,
-    );
-
+  it("returns my pending nominations", () => {
     const mine = {
       ...questDetail.nominations[0]!,
       questNumber: 12,
@@ -655,6 +851,12 @@ describe("questEventSchema", () => {
       "retry_requested",
       "quest_cleared",
     ]) {
+      expect(questEventSchema.safeParse({ ...event, type }).success).toBe(true);
+    }
+  });
+
+  it("accepts the F1 reference and revoke event types", () => {
+    for (const type of ["ref_added", "ref_removed", "clear_revoked"]) {
       expect(questEventSchema.safeParse({ ...event, type }).success).toBe(true);
     }
   });

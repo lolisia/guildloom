@@ -3,20 +3,19 @@
  *
  * Filters (text, multi-select stage, tag) are sent to the list endpoint; the
  * eleven columns sort client-side on header clicks. The M2a columns (party,
- * bounty and floor progress) sit after tags, before the stage. Clicking a row
- * opens the same `?quest=<id>` drawer as the board.
+ * bounty and floor progress) sit after tags, before the stage. Kind ("종류")
+ * follows the title so a feature request is identifiable at a glance. Clicking
+ * a row opens the same `?quest=<id>` drawer as the board.
  *
  * The table follows DESIGN.md: a paper panel holds the filters, the header row
  * sits on the sunken layer, rows are separated by a 1px line and darken to
- * sunken on hover. Stage and rank columns use the pixel icon pack at its native
- * 32px size.
+ * sunken on hover. The ledger keeps text only — no icons in stage, kind or
+ * sort cells.
  */
 import {
-  RANKS,
   STAGES,
   type ListQuestsQuery,
   type QuestSummary,
-  type Rank,
   type Stage,
 } from "@guildloom/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -26,26 +25,23 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { fetchQuests, fetchTags } from "../api/quests";
 import AdventurerSprite from "../components/AdventurerSprite";
 import { formatBounty } from "../components/board/QuestCard";
-import Icon from "../components/Icon";
 import QuestDrawer from "../components/quest/QuestDrawer";
-import RankBadge from "../components/RankBadge";
 import { Button, Chip, Panel, TextInput } from "../components/ui";
 import { ko } from "../i18n/ko";
 import { formatKoreanDate } from "../lib/format";
 import { isImeComposing } from "../lib/ime";
-import { STAGE_ICON } from "../lib/icons";
 import { queryKeys } from "../lib/queryKeys";
 
 /** The eleven ledger columns, in display order. */
 const LEDGER_COLUMNS = [
   "number",
   "title",
+  "kind",
   "tags",
   "party",
   "bounty",
   "floors",
   "stage",
-  "rank",
   "createdBy",
   "createdAt",
   "updatedAt",
@@ -72,19 +68,6 @@ function stageOrder(stage: Stage): number {
   return STAGES.indexOf(stage);
 }
 
-function compareRank(left: Rank | null, right: Rank | null): number {
-  if (left === null && right === null) {
-    return 0;
-  }
-  if (left === null) {
-    return 1;
-  }
-  if (right === null) {
-    return -1;
-  }
-  return RANKS.indexOf(left) - RANKS.indexOf(right);
-}
-
 /** Party member names in display order, used by the column and its sort. */
 function partyLabel(quest: QuestSummary): string {
   return quest.party.map((member) => member.displayName).join(", ");
@@ -100,6 +83,11 @@ function compareQuests(
       return left.number - right.number;
     case "title":
       return left.title.localeCompare(right.title, "ko");
+    case "kind":
+      return ko.quest.kinds[left.kind ?? "fix"].localeCompare(
+        ko.quest.kinds[right.kind ?? "fix"],
+        "ko",
+      );
     case "tags":
       return left.tags.join(", ").localeCompare(right.tags.join(", "), "ko");
     case "party":
@@ -112,8 +100,6 @@ function compareQuests(
     }
     case "stage":
       return stageOrder(left.stage) - stageOrder(right.stage);
-    case "rank":
-      return compareRank(left.rank, right.rank);
     case "createdBy":
       return left.createdBy.displayName.localeCompare(
         right.createdBy.displayName,
@@ -364,18 +350,16 @@ export default function LedgerPage() {
                       type="button"
                       onClick={() => toggleSort(column)}
                       aria-label={ko.ledger.sortBy(ko.ledger.columns[column])}
-                      className="inline-flex items-center gap-1.5 rounded-sm px-0.5 py-0.5 text-left font-pixel text-[12px] text-muted hover:text-ink"
+                      className="inline-flex items-center gap-1 rounded-sm px-0.5 py-0.5 text-left font-pixel text-[12px] text-muted hover:text-ink"
                     >
                       {ko.ledger.columns[column]}
                       {activeDirection ? (
-                        <Icon
-                          name={
-                            activeDirection === "asc"
-                              ? "sort-ascending"
-                              : "sort-descending"
-                          }
-                          size={32}
-                        />
+                        <span
+                          aria-hidden="true"
+                          className="font-pixel text-[12px]"
+                        >
+                          {activeDirection === "asc" ? "▲" : "▼"}
+                        </span>
                       ) : null}
                     </button>
                   </th>
@@ -435,6 +419,9 @@ export default function LedgerPage() {
                     {quest.title}
                   </span>
                 </td>
+                <td className="whitespace-nowrap px-2 py-2 text-xs text-ink">
+                  {ko.quest.kinds[quest.kind ?? "fix"]}
+                </td>
                 <td className="px-2 py-2">
                   {quest.tags.length > 0 ? (
                     <span className="flex flex-wrap gap-1">
@@ -473,14 +460,8 @@ export default function LedgerPage() {
                 <td className="whitespace-nowrap px-2 py-2 font-pixel text-[12px] text-ink">
                   {quest.floors.done}/{quest.floors.total}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2">
-                  <span className="inline-flex items-center gap-2 text-xs text-ink">
-                    <Icon name={STAGE_ICON[quest.stage]} size={32} />
-                    {ko.quest.stages[quest.stage]}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-2 py-2">
-                  <RankBadge rank={quest.rank} size={32} />
+                <td className="whitespace-nowrap px-2 py-2 text-xs text-ink">
+                  {ko.quest.stages[quest.stage]}
                 </td>
                 <td className="px-2 py-2">
                   <span className="flex items-center gap-2">

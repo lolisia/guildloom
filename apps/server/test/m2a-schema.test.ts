@@ -1,9 +1,10 @@
 /**
  * M2a schema tests.
  *
- * Migration `0001` must add the party, nomination, floor, XP ledger and
- * notification tables plus `quests.first_claimed_at`, with the indexes and the
- * unique idempotency key the party/settlement tasks rely on.
+ * Migration `0001` must add the party, nomination, XP ledger and notification
+ * tables plus `quests.first_claimed_at`, with the indexes and the unique
+ * idempotency key the party/settlement tasks rely on. (The floor table from
+ * that migration is removed again by `0002`; see `migration-0002.test.ts`.)
  */
 import type Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -14,7 +15,6 @@ import {
   notifications,
   partyMembers,
   projects,
-  questFloors,
   questNominations,
   quests,
   users,
@@ -24,7 +24,6 @@ import {
 const NEW_TABLES = [
   "notifications",
   "party_members",
-  "quest_floors",
   "quest_nominations",
   "xp_ledger",
 ] as const;
@@ -168,16 +167,6 @@ describe("migration 0001", () => {
         "created_at",
         "resolved_at",
       ]);
-      expect(columnNames(sqlite, "quest_floors")).toEqual([
-        "id",
-        "quest_id",
-        "title",
-        "order_key",
-        "done_at",
-        "done_by",
-        "created_by",
-        "created_at",
-      ]);
       expect(columnNames(sqlite, "xp_ledger")).toEqual([
         "id",
         "user_id",
@@ -308,7 +297,7 @@ describe("migration 0001", () => {
     }
   });
 
-  it("cascades party, nomination and floor rows when a quest is deleted", () => {
+  it("cascades party and nomination rows when a quest is deleted", () => {
     const { db, close } = openDb(":memory:");
     try {
       const { owner, member, project, quest, now } = seed(db);
@@ -338,23 +327,11 @@ describe("migration 0001", () => {
           resolvedAt: null,
         })
         .run();
-      db.insert(questFloors)
-        .values({
-          questId: quest.id,
-          title: "1층: 스키마",
-          orderKey: "a0",
-          doneAt: null,
-          doneBy: null,
-          createdBy: owner.id,
-          createdAt: now,
-        })
-        .run();
 
       db.delete(quests).where(eq(quests.id, quest.id)).run();
 
       expect(db.select().from(partyMembers).all()).toHaveLength(0);
       expect(db.select().from(questNominations).all()).toHaveLength(0);
-      expect(db.select().from(questFloors).all()).toHaveLength(0);
     } finally {
       close();
     }

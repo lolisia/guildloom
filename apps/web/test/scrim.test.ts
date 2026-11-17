@@ -253,9 +253,11 @@ describe("scrim call sites", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("paints all four modal/drawer overlays with plain bg-scrim", () => {
+  it("paints every modal/drawer overlay with plain bg-scrim", () => {
     const overlayCounts = [
       ["components/quest/QuestDrawer.tsx", 2], // drawer + archive confirm
+      ["components/quest/ClearConfirmDialog.tsx", 1], // clear confirmation
+      ["components/quest/UnclearConfirmDialog.tsx", 1], // clear revocation
       ["components/board/QuickAdd.tsx", 1], // bulk-paste confirm
       ["components/TabBar.tsx", 1], // create-guild dialog
     ] as const;
@@ -267,7 +269,7 @@ describe("scrim call sites", () => {
       expect(uses, `${file} overlay count`).toHaveLength(expected);
       total += uses.length;
     }
-    expect(total).toBe(4);
+    expect(total).toBe(6);
   });
 
   it("keeps the alpha inside the token instead of an opacity modifier", () => {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Ledger table tests: the eleven exact columns, the design-system table surface
- * (sunken header, line separators), stage/rank/avatar cells, the M2a party,
+ * (sunken header, line separators), kind/stage/avatar cells, the M2a party,
  * bounty and floor columns, text/tag/search filtering, client-side header
  * sorting and opening the shared quest drawer from a row.
  *
@@ -94,6 +94,7 @@ const QUESTS: QuestSummary[] = [
     number: 1,
     title: "Alpha",
     stage: "board",
+    kind: "fix",
     rank: "C",
     orderKey: "a0",
     tags: ["긴급"],
@@ -117,6 +118,7 @@ const QUESTS: QuestSummary[] = [
     number: 2,
     title: "Beta",
     stage: "dungeon",
+    kind: "feature",
     rank: "A",
     orderKey: "a1",
     tags: ["버그"],
@@ -140,6 +142,7 @@ const QUESTS: QuestSummary[] = [
     number: 3,
     title: "Gamma",
     stage: "archived",
+    kind: "fix",
     rank: null,
     orderKey: "a2",
     tags: ["긴급"],
@@ -157,7 +160,7 @@ const QUEST_DETAIL: Quest = {
   ...QUESTS[0]!,
   projectId: 1,
   situation: "상황",
-  direction: "방향",
+  direction: "- [x] 1층: 상황 정리",
   archiveReason: null,
   party: [
     {
@@ -169,15 +172,8 @@ const QUEST_DETAIL: Quest = {
     },
   ],
   nominations: [],
-  floors: [
-    {
-      id: 1,
-      title: "1층: 상황 정리",
-      orderKey: "a0",
-      doneAt: Date.UTC(2026, 0, 4, 3, 0, 0),
-      doneBy: { id: 1, displayName: "김모험" },
-    },
-  ],
+  floors: { done: 1, total: 1 },
+  refs: [],
   firstClaimedAt: Date.UTC(2026, 0, 2, 3, 0, 0),
 };
 
@@ -334,20 +330,24 @@ describe("LedgerPage", () => {
         screen.getByRole("button", { name: ko.ledger.sortBy(label) }),
       ).toBeInTheDocument();
     }
-    // Title stays second; the M2a party/bounty/floors columns follow tags.
+    // Title stays second; kind follows it, then the M2a party/bounty/floors
+    // columns and the stage. The retired rank column is absent.
     expect(headers.map((header) => header.textContent?.trim())).toEqual([
       ko.ledger.columns.number,
       ko.ledger.columns.title,
+      ko.ledger.columns.kind,
       ko.ledger.columns.tags,
       ko.ledger.columns.party,
       ko.ledger.columns.bounty,
       ko.ledger.columns.floors,
       ko.ledger.columns.stage,
-      ko.ledger.columns.rank,
       ko.ledger.columns.createdBy,
       ko.ledger.columns.createdAt,
       ko.ledger.columns.updatedAt,
     ]);
+    expect(ko.ledger.columns).not.toHaveProperty("rank");
+    expect(screen.queryByText("등급", { exact: false })).toBeNull();
+    expect(container.querySelector("[data-rank]")).toBeNull();
 
     expect(rowTitles(container)).toEqual(["Alpha", "Beta", "Gamma"]);
     expect(
@@ -380,7 +380,7 @@ describe("LedgerPage", () => {
     }
   });
 
-  it("shows stage icons, rank badges and square author avatars", async () => {
+  it("shows kind text, stage text and square author avatars", async () => {
     stubFetch(defaultHandler());
     const { container } = renderLedger();
 
@@ -393,30 +393,29 @@ describe("LedgerPage", () => {
     const cells = row!.querySelectorAll<HTMLTableCellElement>("td");
     expect(cells).toHaveLength(11);
 
-    const stageCell = cells[6]!;
-    expect(stageCell.querySelector("img")).toHaveAttribute(
-      "src",
-      expect.stringContaining("board.png"),
-    );
-    expect(stageCell).toHaveTextContent(ko.quest.stages.board);
+    const kindCell = cells[2]!;
+    expect(kindCell).toHaveTextContent(ko.quest.kinds.fix);
+    expect(kindCell.querySelector("img")).toBeNull();
 
-    const rankCell = cells[7]!;
-    const rank = rankCell.querySelector("[data-rank]");
-    expect(rank).toHaveAttribute("data-rank", "C");
-    expect(rank?.querySelector("img")).toHaveAttribute(
-      "src",
-      expect.stringContaining("rank-c.png"),
-    );
+    const stageCell = cells[7]!;
+    expect(stageCell).toHaveTextContent(ko.quest.stages.board);
+    expect(stageCell.querySelector("img")).toBeNull();
 
     const authorCell = cells[8]!;
     const avatar = authorCell.querySelector("[data-user-id='1']");
     expect(avatar).toBeInTheDocument();
     expect(avatar?.className).toContain("rounded-sm");
-    expect(avatar?.className).toContain("h-8");
-    expect(avatar?.className).toContain("w-8");
+    expect(avatar?.className).toContain("h-6");
+    expect(avatar?.className).toContain("w-6");
+
+    // Feature requests read as 신규 in the same column.
+    const betaCells = container
+      .querySelector('tbody tr[data-quest-id="2"]')!
+      .querySelectorAll<HTMLTableCellElement>("td");
+    expect(betaCells[2]).toHaveTextContent(ko.quest.kinds.feature);
   });
 
-  it("marks the active sort column with an ascending or descending icon", async () => {
+  it("marks the active sort column with a text arrow", async () => {
     stubFetch(defaultHandler());
     const { user } = renderLedger();
 
@@ -429,33 +428,29 @@ describe("LedgerPage", () => {
       name: ko.ledger.sortBy(ko.ledger.columns.title),
     });
     expect(createdAtHeader.querySelector("img")).toBeNull();
+    expect(createdAtHeader.textContent).toBe(ko.ledger.columns.createdAt);
     expect(titleHeader.querySelector("img")).toBeNull();
 
     await user.click(createdAtHeader);
     await waitFor(() =>
-      expect(createdAtHeader.querySelector("img")).toHaveAttribute(
-        "src",
-        expect.stringContaining("sort-ascending.png"),
+      expect(createdAtHeader.textContent).toBe(
+        `${ko.ledger.columns.createdAt}▲`,
       ),
     );
-    expect(titleHeader.querySelector("img")).toBeNull();
+    expect(titleHeader.textContent).toBe(ko.ledger.columns.title);
 
     await user.click(createdAtHeader);
     await waitFor(() =>
-      expect(createdAtHeader.querySelector("img")).toHaveAttribute(
-        "src",
-        expect.stringContaining("sort-descending.png"),
+      expect(createdAtHeader.textContent).toBe(
+        `${ko.ledger.columns.createdAt}▼`,
       ),
     );
 
     await user.click(titleHeader);
     await waitFor(() =>
-      expect(titleHeader.querySelector("img")).toHaveAttribute(
-        "src",
-        expect.stringContaining("sort-ascending.png"),
-      ),
+      expect(titleHeader.textContent).toBe(`${ko.ledger.columns.title}▲`),
     );
-    expect(createdAtHeader.querySelector("img")).toBeNull();
+    expect(createdAtHeader.textContent).toBe(ko.ledger.columns.createdAt);
   });
 
   it("filters by tag and sends the tag to the list endpoint", async () => {
@@ -584,25 +579,25 @@ describe("LedgerPage", () => {
     const alphaCells = container
       .querySelector('tbody tr[data-quest-id="1"]')!
       .querySelectorAll<HTMLTableCellElement>("td");
-    expect(alphaCells[3]).toHaveTextContent("하늘");
-    expect(alphaCells[4]).toHaveClass("font-pixel", "text-[12px]", "text-gold");
-    expect(alphaCells[4]).toHaveTextContent("80");
-    expect(alphaCells[5]).toHaveClass("font-pixel", "text-[12px]");
-    expect(alphaCells[5]).toHaveTextContent("1/4");
+    expect(alphaCells[4]).toHaveTextContent("하늘");
+    expect(alphaCells[5]).toHaveClass("font-pixel", "text-[12px]", "text-gold");
+    expect(alphaCells[5]).toHaveTextContent("80");
+    expect(alphaCells[6]).toHaveClass("font-pixel", "text-[12px]");
+    expect(alphaCells[6]).toHaveTextContent("1/4");
 
     const betaCells = container
       .querySelector('tbody tr[data-quest-id="2"]')!
       .querySelectorAll<HTMLTableCellElement>("td");
-    expect(betaCells[3]).toHaveTextContent("가온");
-    expect(betaCells[4]).toHaveTextContent("300");
-    expect(betaCells[5]).toHaveTextContent("2/3");
+    expect(betaCells[4]).toHaveTextContent("가온");
+    expect(betaCells[5]).toHaveTextContent("300");
+    expect(betaCells[6]).toHaveTextContent("2/3");
 
     const gammaCells = container
       .querySelector('tbody tr[data-quest-id="3"]')!
       .querySelectorAll<HTMLTableCellElement>("td");
-    expect(gammaCells[3]).toHaveTextContent(ko.quest.emptyParty);
-    expect(gammaCells[4]).toHaveTextContent("40");
-    expect(gammaCells[5]).toHaveTextContent("1/2");
+    expect(gammaCells[4]).toHaveTextContent(ko.quest.emptyParty);
+    expect(gammaCells[5]).toHaveTextContent("40");
+    expect(gammaCells[6]).toHaveTextContent("1/2");
   });
 
   it("sorts by party, bounty and floor progress", async () => {
@@ -639,6 +634,27 @@ describe("LedgerPage", () => {
     await user.click(floorsHeader);
     await waitFor(() =>
       expect(rowTitles(container)).toEqual(["Beta", "Alpha", "Gamma"]),
+    );
+  });
+
+  it("sorts by kind", async () => {
+    stubFetch(defaultHandler());
+    const { container, user } = renderLedger();
+
+    await screen.findByText("Alpha");
+    expect(rowTitles(container)).toEqual(["Alpha", "Beta", "Gamma"]);
+
+    const kindHeader = screen.getByRole("button", {
+      name: ko.ledger.sortBy(ko.ledger.columns.kind),
+    });
+    await user.click(kindHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Alpha", "Gamma", "Beta"]),
+    );
+
+    await user.click(kindHeader);
+    await waitFor(() =>
+      expect(rowTitles(container)).toEqual(["Beta", "Gamma", "Alpha"]),
     );
   });
 

@@ -6,13 +6,14 @@
  * may be checked at once; submitting posts the selected ids to
  * `POST /api/quests/:id/nominations` (non-members) or `.../reinforcements`
  * (active members). The created nominations are handed back to the party
- * section, which merges them into the quest cache.
+ * section, which merges them into the quest cache; the popover itself refreshes
+ * the adventure log because the server records one event per batch.
  *
  * The panel follows DESIGN.md's popover rule: paper, 1.5px ink outline and one
  * `4px 4px 0 ink` hard shadow.
  */
 import type { Nomination, ProjectMember } from "@guildloom/shared";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { nominate, reinforce } from "../../api/party";
@@ -49,6 +50,7 @@ export function NominationPopover({
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  const queryClient = useQueryClient();
 
   const projectQuery = useQuery({
     queryKey: queryKeys.project(projectId),
@@ -65,6 +67,15 @@ export function NominationPopover({
     onSuccess: (data) => {
       onCreated(data.nominations);
       setOpen(false);
+    },
+    onSettled: () => {
+      // A nomination or reinforcement batch appends one quest event, so the
+      // drawer's adventure log must refresh even before it is reopened. A failed
+      // request leaves the server history unchanged; the extra refetch is
+      // harmless there too.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.events(questId),
+      });
     },
   });
 
@@ -146,7 +157,6 @@ export function NominationPopover({
         type="button"
         size="md"
         variant="secondary"
-        icon={isReinforce ? "reinforce" : "nominate"}
         aria-haspopup="dialog"
         aria-expanded={open}
         data-party-nomination-trigger={kind}

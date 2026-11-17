@@ -6,6 +6,7 @@
  */
 export * from "./api.js";
 export * from "./bounty.js";
+export * from "./checklist.js";
 export * from "./constants.js";
 export * from "./events.js";
 export * from "./level.js";

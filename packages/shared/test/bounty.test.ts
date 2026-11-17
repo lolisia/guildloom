@@ -1,48 +1,42 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  BASE_CLEAR_XP,
   BOUNTY_CAP,
   DUSTY_AFTER_DAYS,
   computeBounty,
+  type BountyInput,
 } from "../src/index.js";
 
 const DAY = 86_400_000;
 const CREATED_AT = Date.UTC(2026, 0, 1, 0, 0, 0);
 
 describe("computeBounty", () => {
-  it("uses the rank base XP with no multiplier on day 0", () => {
+  it("uses the flat 40 XP clear base on day 0", () => {
+    expect(BASE_CLEAR_XP).toBe(40);
     expect(
       computeBounty({
-        rank: "C",
         createdAt: CREATED_AT,
         firstClaimedAt: null,
         now: CREATED_AT,
       }),
     ).toEqual({
-      base: 80,
+      base: 40,
       multiplier: 1,
-      total: 80,
+      total: 40,
       days: 0,
       dusty: false,
     });
   });
 
-  it("falls back to the default rank when the quest has none", () => {
-    const bounty = computeBounty({
-      rank: null,
-      createdAt: CREATED_AT,
-      firstClaimedAt: null,
-      now: CREATED_AT,
-    });
-
-    // DEFAULT_RANK is D (40 base XP).
-    expect(bounty.base).toBe(40);
-    expect(bounty.total).toBe(40);
+  it("takes only the quest timestamps, never a rank", () => {
+    expectTypeOf<keyof BountyInput>().toEqualTypeOf<
+      "createdAt" | "firstClaimedAt" | "now"
+    >();
   });
 
   it("adds 20% per full day on the board", () => {
     const bounty = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt: null,
       now: CREATED_AT + 3 * DAY,
@@ -56,7 +50,6 @@ describe("computeBounty", () => {
 
   it("ignores partial days", () => {
     const bounty = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt: null,
       now: CREATED_AT + 3 * DAY + (DAY - 1),
@@ -68,13 +61,11 @@ describe("computeBounty", () => {
 
   it("caps the multiplier at BOUNTY_CAP", () => {
     const capped = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt: null,
       now: CREATED_AT + 5 * DAY,
     });
     const longOpen = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt: null,
       now: CREATED_AT + 60 * DAY,
@@ -92,7 +83,6 @@ describe("computeBounty", () => {
     const firstClaimedAt = CREATED_AT + 3 * DAY;
 
     const bounty = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt,
       now: CREATED_AT + 30 * DAY,
@@ -107,7 +97,6 @@ describe("computeBounty", () => {
   it("turns dusty only after the cap plus the grace period", () => {
     const dust = (days: number) =>
       computeBounty({
-        rank: "D",
         createdAt: CREATED_AT,
         firstClaimedAt: null,
         now: CREATED_AT + days * DAY,
@@ -121,7 +110,6 @@ describe("computeBounty", () => {
     // A claimed quest never becomes dusty, even long after the cap.
     expect(
       computeBounty({
-        rank: "D",
         createdAt: CREATED_AT,
         firstClaimedAt: CREATED_AT + DAY,
         now: CREATED_AT + 30 * DAY,
@@ -131,7 +119,6 @@ describe("computeBounty", () => {
 
   it("never returns negative days for clocks that run backwards", () => {
     const bounty = computeBounty({
-      rank: "D",
       createdAt: CREATED_AT,
       firstClaimedAt: null,
       now: CREATED_AT - 3 * DAY,

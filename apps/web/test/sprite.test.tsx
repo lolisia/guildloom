@@ -181,8 +181,8 @@ describe("AdventurerSprite", () => {
       '[data-user-id="11"]',
     ) as HTMLElement;
     expect(sprite).toHaveAttribute("data-state", "idle");
-    expect(sprite.className).toContain("h-8");
-    expect(sprite.className).toContain("w-8");
+    expect(sprite.className).toContain("h-6");
+    expect(sprite.className).toContain("w-6");
   });
 
   it("changes only data-state when the sprite state changes", () => {
@@ -256,7 +256,7 @@ describe("AdventurerSprite", () => {
 
     rerender(<AdventurerSprite userId={9} displayName="큰모험" size="md" />);
     const md = container.querySelector('[data-user-id="9"]') as HTMLElement;
-    expect(md.className).toContain("h-10");
+    expect(md.className).toContain("h-7");
   });
 
   it("keeps unicode code points intact and falls back for empty names", () => {
