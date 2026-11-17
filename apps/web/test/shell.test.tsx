@@ -517,9 +517,14 @@ describe("TabBar", () => {
 
     const bar = header.firstElementChild as HTMLElement;
     expect(bar).toHaveClass("h-11", "items-center");
+    expect(bar).toHaveClass("w-full", "px-4");
+    expect(bar).not.toHaveClass("max-w-screen-2xl");
 
     const main = view.container.querySelector("main") as HTMLElement;
     expect(main).toHaveClass("p-4");
+    expect(main).toHaveClass("w-full");
+    expect(main).not.toHaveClass("max-w-screen-2xl");
+    expect(main).not.toHaveClass("mx-auto");
 
     const logo = within(header).getByRole("link", {
       name: ko.common.appName,

@@ -50,7 +50,7 @@ export function BoardColumn({
       ref={setNodeRef}
       data-stage={stage}
       aria-label={ko.board.columns[stage]}
-      className={`flex min-h-64 flex-col gap-3 rounded-sm border-[1.5px] bg-sunken p-3 transition-colors ${
+      className={`flex min-h-64 flex-col gap-2 rounded-sm border-[1.5px] bg-sunken p-2 transition-colors ${
         isOver ? "border-teal" : "border-line-strong"
       }`}
     >

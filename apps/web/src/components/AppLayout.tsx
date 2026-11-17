@@ -51,7 +51,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-ground font-body text-ink">
       <TabBar />
-      <main className="mx-auto w-full max-w-screen-2xl p-4">
+      <main className="w-full p-4">
         <Outlet />
       </main>
       <ToastHost />
