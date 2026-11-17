@@ -6,6 +6,10 @@
  * with its local timestamp. "전체 기록 보기 (N)" toggles the full history;
  * the expanded state is local to the drawer and resets when it closes.
  *
+ * With no key events the collapsed view stands in a one-line
+ * "아직 큰 사건은 없습니다" note instead of an empty list. Expanding the
+ * history always replaces that note with every recorded event, key or not.
+ *
  * Sentences come from the shared `renderEvent`, so the board and the drawer
  * always produce the same Korean copy.
  */
@@ -78,7 +82,7 @@ export function EventTimeline({
         </p>
       ) : null}
 
-      {!isPending && !isError && keyEvents.length === 0 ? (
+      {!isPending && !isError && !expanded && keyEvents.length === 0 ? (
         <p className="text-xs text-muted">{ko.board.drawer.keyEventsEmpty}</p>
       ) : null}
 

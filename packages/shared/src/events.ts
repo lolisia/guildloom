@@ -50,18 +50,6 @@ export type QuestEventType = (typeof QUEST_EVENT_TYPES)[number];
 export const questEventTypeSchema = z.enum(QUEST_EVENT_TYPES);
 
 /**
- * The event type schema used by responses.
- *
- * Runtime validation is the full enum above. The inferred TypeScript type is
- * deliberately widened to `string` so consumers that keep a
- * `Record<QuestEvent["type"], ...>` (the current board timeline) stay
- * assignable until the F1 web task adds icons for the new event types.
- */
-const questEventResponseTypeSchema = questEventTypeSchema as unknown as z.ZodType<
-  string
->;
-
-/**
  * Event types that notify the guild as a whole (보드 알림). Reference and
  * checklist edits stay in the quest log instead.
  */
@@ -192,16 +180,41 @@ export const floorAddedPayloadSchema = z.object({
 });
 export type FloorAddedPayload = z.infer<typeof floorAddedPayloadSchema>;
 
-/**
- * `floor_checked` payload (`done: false` reopens the item).
- *
- * The type name is historical: F1 checklists reuse it, so the payload carries
- * the checklist item text instead of a floor id/title.
- */
-export const floorCheckedPayloadSchema = z.object({
+/** `floor_checked` payload for a checklist item (`done: false` reopens it). */
+export const checklistItemCheckedPayloadSchema = z.object({
   text: z.string(),
   done: z.boolean(),
 });
+export type ChecklistItemCheckedPayload = z.infer<
+  typeof checklistItemCheckedPayloadSchema
+>;
+
+/**
+ * Legacy `floor_checked` payload written while dungeon floors lived in the
+ * checklist (`done: false` reopened the floor). Historical event rows keep
+ * this shape, so the renderer still has to understand it.
+ */
+export const legacyFloorCheckedPayloadSchema = z.object({
+  floorId: idSchema,
+  title: z.string(),
+  done: z.boolean(),
+});
+export type LegacyFloorCheckedPayload = z.infer<
+  typeof legacyFloorCheckedPayloadSchema
+>;
+
+/**
+ * `floor_checked` payload: the current checklist item text, or the legacy
+ * floor id/title shape still present in older events.
+ *
+ * The type name is historical: F1 checklists reuse it. The union lists the
+ * current shape first, and its members are disjoint (`text` vs. `floorId`/
+ * `title`), so a stored payload matches at most one branch.
+ */
+export const floorCheckedPayloadSchema = z.union([
+  checklistItemCheckedPayloadSchema,
+  legacyFloorCheckedPayloadSchema,
+]);
 export type FloorCheckedPayload = z.infer<typeof floorCheckedPayloadSchema>;
 
 /** `ref_added` payload (참고 문서 추가). */
@@ -255,7 +268,7 @@ export const questEventSchema = z.object({
   id: idSchema,
   questId: idSchema,
   projectId: idSchema,
-  type: questEventResponseTypeSchema,
+  type: questEventTypeSchema,
   payload: z.unknown(),
   actor: userRefSchema.nullable(),
   familiarId: z.number().int().nullable(),
@@ -506,10 +519,13 @@ export function renderEvent(
       }
       case "floor_checked": {
         const payload = floorCheckedPayloadSchema.parse(event.payload);
+        // Current checklist events carry `text`; historical rows only carry
+        // the M2 floor `title`.
+        const label = "text" in payload ? payload.text : payload.title;
         const verb = payload.done ? "돌파했습니다." : "다시 열었습니다.";
         return [
           renderActor(event, ctx),
-          { kind: "text", text: ` 가 '${payload.text}' 을 ${verb}` },
+          { kind: "text", text: ` 가 '${label}' 을 ${verb}` },
         ];
       }
       case "ref_added": {

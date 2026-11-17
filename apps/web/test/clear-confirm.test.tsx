@@ -492,6 +492,13 @@ describe("ClearConfirmDialog preview", () => {
     expect(confirm.className).toContain("shadow-hard");
     expect(confirm.className).not.toMatch(/gradient|blur|glow/);
 
+    // F1 dialog titles use the 18px body step, not Tailwind's 16px `text-base`.
+    const title = within(confirm).getByRole("heading", {
+      name: ko.board.drawer.clear.confirmTitle,
+    });
+    expect(title).toHaveClass("text-[18px]");
+    expect(title).not.toHaveClass("text-base");
+
     expect(
       within(confirm).getByText(ko.board.drawer.clear.totalXp(70)),
     ).toBeInTheDocument();
@@ -704,6 +711,12 @@ describe("clear success toast", () => {
     expect(
       within(confirm).getByText(ko.board.drawer.unclear.confirm(60)),
     ).toBeInTheDocument();
+
+    const title = within(confirm).getByRole("heading", {
+      name: ko.board.drawer.unclear.confirmTitle,
+    });
+    expect(title).toHaveClass("text-[18px]");
+    expect(title).not.toHaveClass("text-base");
 
     // Cancelling the revoke must not call unclear.
     await user.click(

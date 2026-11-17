@@ -931,7 +931,7 @@ describe("QuestDrawer adventure log", () => {
   });
 
   it("shows '아직 큰 사건은 없습니다' when only non-key events exist", async () => {
-    const { dialog } = await openDrawer(baseQuest(), {
+    const { dialog, user } = await openDrawer(baseQuest(), {
       events: [
         makeEvent(1, "quest_edited", NOW + 100),
         makeEvent(2, "quest_moved", NOW + 200),
@@ -942,6 +942,23 @@ describe("QuestDrawer adventure log", () => {
       within(dialog).getByText(ko.board.drawer.keyEventsEmpty),
     ).toBeInTheDocument();
     expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
+
+    // Expanding replaces the note with the full history.
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: ko.board.drawer.showAllHistory(2),
+      }),
+    );
+    expect(
+      within(dialog).queryByText(ko.board.drawer.keyEventsEmpty),
+    ).toBeNull();
+    await waitFor(() =>
+      expect(
+        Array.from(
+          dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+        ).map((row) => Number(row.dataset.eventId)),
+      ).toEqual([1, 2]),
+    );
   });
 });
 

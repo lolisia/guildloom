@@ -4,6 +4,7 @@ import {
   KEY_EVENT_TYPES,
   MEMBER_STATUS_LABELS,
   QUEST_EVENT_TYPES,
+  floorCheckedPayloadSchema,
   isKeyEvent,
   renderEvent,
   type EventRenderContext,
@@ -372,6 +373,28 @@ describe("renderEvent", () => {
     );
   });
 
+  it("renders a legacy floor_checked payload from the M2 floor list", () => {
+    const cleared = renderEvent(
+      makeEvent({
+        type: "floor_checked",
+        payload: { floorId: 5, title: "3층: API 수정", done: true },
+      }),
+    );
+    const reopened = renderEvent(
+      makeEvent({
+        type: "floor_checked",
+        payload: { floorId: 5, title: "3층: API 수정", done: false },
+      }),
+    );
+
+    expect(sentence(cleared)).toBe(
+      "'김철수' 가 '3층: API 수정' 을 돌파했습니다.",
+    );
+    expect(sentence(reopened)).toBe(
+      "'김철수' 가 '3층: API 수정' 을 다시 열었습니다.",
+    );
+  });
+
   it("renders a reference document being added", () => {
     const labelled = renderEvent(
       makeEvent({
@@ -529,6 +552,29 @@ describe("renderEvent", () => {
 
     expect(() => renderEvent(event)).not.toThrow();
     expect(renderEvent(event)[0]?.kind).toBe("text");
+  });
+});
+
+describe("floorCheckedPayloadSchema", () => {
+  it("accepts the current checklist payload", () => {
+    expect(
+      floorCheckedPayloadSchema.parse({ text: "3층: API 수정", done: true }),
+    ).toEqual({ text: "3층: API 수정", done: true });
+  });
+
+  it("accepts the legacy floor payload still stored in older events", () => {
+    const payload = { floorId: 5, title: "3층: API 수정", done: false };
+
+    expect(floorCheckedPayloadSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("rejects a payload that matches neither shape", () => {
+    expect(
+      floorCheckedPayloadSchema.safeParse({ floorId: 5, done: true }).success,
+    ).toBe(false);
+    expect(floorCheckedPayloadSchema.safeParse({ text: "x" }).success).toBe(
+      false,
+    );
   });
 });
 

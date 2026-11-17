@@ -89,7 +89,7 @@ export function UnclearConfirmDialog({
         aria-labelledby={titleId}
         className="w-full max-w-sm rounded-sm border-[1.5px] border-line-strong bg-paper p-5 shadow-hard"
       >
-        <h2 id={titleId} className="text-base font-semibold text-ink">
+        <h2 id={titleId} className="text-[18px] font-semibold text-ink">
           {ko.board.drawer.unclear.confirmTitle}
         </h2>
         <p className="mt-2 text-sm text-ink">
