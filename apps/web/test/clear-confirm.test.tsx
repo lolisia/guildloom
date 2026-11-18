@@ -277,6 +277,26 @@ function stubApi(initialQuest: Quest, options: StubOptions = {}) {
       if (method === "GET" && path === "/api/projects/1/tags") {
         return jsonResponse([]);
       }
+      if (method === "GET" && path === "/api/quests/1/messages") {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
+      if (method === "GET" && path === "/api/projects/1") {
+        return jsonResponse({
+          project: { id: 1, name: "달빛 길드", createdAt: NOW },
+          members: [
+            {
+              userId: 1,
+              displayName: "김모험",
+              role: "owner",
+              xp: 0,
+              level: 1,
+            },
+          ],
+        });
+      }
+      if (method === "GET" && path === "/api/projects/1/chat/unread") {
+        return jsonResponse({ tavern: 0, quests: [] });
+      }
       if (method === "GET" && path === "/api/me/nominations") {
         return jsonResponse([]);
       }

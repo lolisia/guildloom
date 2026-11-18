@@ -1,20 +1,17 @@
 /**
  * The quest's adventure log ("모험 기록").
  *
- * The section is collapsed by default: only the three most recent key events
- * (notifications-worthy moments from `isKeyEvent`) are listed, one line each
- * with its local timestamp. "전체 기록 보기 (N)" toggles the full history;
- * the expanded state is local to the drawer and resets when it closes.
+ * The section only shows its heading and the "전체 기록 보기 (N)" toggle until
+ * the adventurer asks for the history; the party chat above it already carries
+ * the key events that matter while talking. Expanding lists every recorded
+ * event in chronological order (key or not), one line each with its local
+ * timestamp. The expanded state is local to the drawer and resets when it
+ * closes. With no events at all only the heading remains.
  *
- * With no key events the collapsed view stands in a one-line
- * "아직 큰 사건은 없습니다" note instead of an empty list. Expanding the
- * history always replaces that note with every recorded event, key or not.
- *
- * Sentences come from the shared `renderEvent`, so the board and the drawer
- * always produce the same Korean copy.
+ * Sentences come from the shared `renderEvent`, so the board, the adventure log
+ * and the party-chat timeline always produce the same Korean copy.
  */
 import {
-  isKeyEvent,
   renderEvent,
   type EventRenderContext,
   type QuestEvent,
@@ -26,19 +23,17 @@ import { ko } from "../../i18n/ko";
 import { formatKoreanDateTime } from "../../lib/format";
 
 /** M1 has no familiar directory yet; fall back to the familiar's sequence id. */
-const EVENT_CONTEXT: EventRenderContext = {
+export const EVENT_RENDER_CONTEXT: EventRenderContext = {
   familiar: (familiarId) => ({ seq: familiarId }),
 };
 
-const SEGMENT_CLASSES: Record<SegmentKind, string> = {
+/** Segment colours shared with the party-chat timeline. */
+export const EVENT_SEGMENT_CLASSES: Record<SegmentKind, string> = {
   actor: "font-medium text-ink",
   quest: "text-teal",
   stage: "font-semibold text-ink",
   text: "text-muted",
 };
-
-/** How many key events stay visible while the history is collapsed. */
-export const COLLAPSED_KEY_EVENT_LIMIT = 3;
 
 /** Props for {@link EventTimeline}. */
 export interface EventTimelineProps {
@@ -58,11 +53,8 @@ export function EventTimeline({
   const chronological = [...(events ?? [])].sort(
     (left, right) => left.createdAt - right.createdAt || left.id - right.id,
   );
-  const keyEvents = chronological.filter((event) => isKeyEvent(event.type));
-  const visible = expanded
-    ? chronological
-    : keyEvents.slice(-COLLAPSED_KEY_EVENT_LIMIT);
   const total = chronological.length;
+  const visible = expanded ? chronological : [];
 
   return (
     <section aria-label={ko.board.drawer.history} className="space-y-2">
@@ -82,10 +74,6 @@ export function EventTimeline({
         </p>
       ) : null}
 
-      {!isPending && !isError && !expanded && keyEvents.length === 0 ? (
-        <p className="text-xs text-muted">{ko.board.drawer.keyEventsEmpty}</p>
-      ) : null}
-
       {visible.length > 0 ? (
         <ol className="space-y-1">
           {visible.map((event) => (
@@ -96,15 +84,17 @@ export function EventTimeline({
               className="flex items-baseline justify-between gap-2 rounded-sm border border-line bg-paper px-2.5 py-1.5"
             >
               <p className="min-w-0 text-xs leading-relaxed">
-                {renderEvent(event, EVENT_CONTEXT).map((segment, index) => (
-                  <span
-                    key={`${event.id}-${index}`}
-                    data-segment={segment.kind}
-                    className={SEGMENT_CLASSES[segment.kind]}
-                  >
-                    {segment.text}
-                  </span>
-                ))}
+                {renderEvent(event, EVENT_RENDER_CONTEXT).map(
+                  (segment, index) => (
+                    <span
+                      key={`${event.id}-${index}`}
+                      data-segment={segment.kind}
+                      className={EVENT_SEGMENT_CLASSES[segment.kind]}
+                    >
+                      {segment.text}
+                    </span>
+                  ),
+                )}
               </p>
               <time
                 dateTime={new Date(event.createdAt).toISOString()}

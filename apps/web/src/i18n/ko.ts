@@ -290,6 +290,8 @@ export const ko = {
     dragHint: "카드를 끌어 단계를 옮길 수 있습니다.",
     moveFailed: "의뢰를 옮기지 못했습니다.",
     questCount: (count: number): string => `${count}건`,
+    /** Unread party-chat chip on a quest card (`99+` above the cap). */
+    unreadMessages: (count: number | string): string => `새 글 ${count}`,
     bulk: {
       title: "여러 의뢰 등록",
       description:
@@ -314,7 +316,6 @@ export const ko = {
       floorRatio: (done: number, total: number): string => `${done}/${total}`,
       progressPercent: (percent: number): string => `${percent}%`,
       history: "모험 기록",
-      keyEventsEmpty: "아직 큰 사건은 없습니다",
       showAllHistory: (count: number): string => `전체 기록 보기 (${count})`,
       archive: "의뢰 내리기",
       archiveConfirm: "이 의뢰를 내릴까요?",
@@ -582,6 +583,10 @@ export const ko = {
     alreadyPromoted: "이미 의뢰로 등록된 메시지입니다.",
     commandTitleRequired: "제목을 적어 주세요: /의뢰 제목",
     unreadBadge: (count: number): string => `읽지 않은 메시지 ${count}개`,
+  },
+  partyChat: {
+    title: "파티 채팅",
+    composerPlaceholder: "파티에게 한마디 — @이름으로 부르기",
   },
   party: {
     title: "파티",

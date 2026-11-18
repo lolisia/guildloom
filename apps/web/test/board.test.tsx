@@ -276,6 +276,28 @@ function defaultHandler(quests: QuestSummary[] = QUESTS): MockHandler {
     if (method === "GET" && url.pathname === "/api/quests/1/events") {
       return { body: EVENTS };
     }
+    if (method === "GET" && url.pathname === "/api/quests/1/messages") {
+      return { body: { messages: [], hasMore: false } };
+    }
+    if (method === "GET" && url.pathname === "/api/projects/1") {
+      return {
+        body: {
+          project: { id: 1, name: "달빛 길드", createdAt: NOW },
+          members: [
+            {
+              userId: 1,
+              displayName: "김모험",
+              role: "owner",
+              xp: 0,
+              level: 1,
+            },
+          ],
+        },
+      };
+    }
+    if (method === "GET" && url.pathname === "/api/projects/1/chat/unread") {
+      return { body: { tavern: 0, quests: [] } };
+    }
     return undefined;
   };
 }
@@ -506,12 +528,9 @@ describe("BoardPage", () => {
     ).toHaveAttribute("href", "https://example.com");
 
     expect(within(dialog).getByText("'김모험'")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(formatKoreanDateTime(EVENTS[0]!.createdAt)),
-    ).toBeInTheDocument();
-    // Collapsed history lists only key events (quest_posted); expanding shows
-    // the non-key quest_moved row too.
-    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(1);
+    // The adventure log is collapsed now; only its toggle is visible until
+    // expanded.
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
     fireEvent.click(
       within(dialog).getByRole("button", {
         name: ko.board.drawer.showAllHistory(EVENTS.length),
@@ -522,6 +541,54 @@ describe("BoardPage", () => {
         EVENTS.length,
       ),
     );
+    expect(
+      within(dialog).getByText(formatKoreanDateTime(EVENTS[0]!.createdAt)),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the unread party-chat chip on the matching card", async () => {
+    stubFetch((url, init) => {
+      const method = (init.method ?? "GET").toUpperCase();
+      if (
+        method === "GET" &&
+        url.pathname === "/api/projects/1/chat/unread"
+      ) {
+        return {
+          body: {
+            tavern: 0,
+            quests: [
+              { questId: 1, count: 3 },
+              { questId: 2, count: 120 },
+            ],
+          },
+        };
+      }
+      return defaultHandler()(url, init);
+    });
+    const { container } = renderBoard();
+
+    await screen.findByText("보드 첫 의뢰");
+    const firstCard = container.querySelector<HTMLElement>(
+      '[data-quest-id="1"]',
+    );
+    const secondCard = container.querySelector<HTMLElement>(
+      '[data-quest-id="2"]',
+    );
+    expect(firstCard).not.toBeNull();
+    expect(secondCard).not.toBeNull();
+
+    await waitFor(() =>
+      expect(
+        within(firstCard!).getByTestId("card-unread"),
+      ).toHaveTextContent("새 글 3"),
+    );
+    expect(
+      within(secondCard!).getByTestId("card-unread"),
+    ).toHaveTextContent("새 글 99+");
+    // Unread counts never leak to unrelated cards.
+    expect(
+      container.querySelector('[data-quest-id="3"] [data-testid="card-unread"]'),
+    ).toBeNull();
   });
 
   it("saves the kind, title, tags and long text through PATCH", async () => {

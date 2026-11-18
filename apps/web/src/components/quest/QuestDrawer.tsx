@@ -63,8 +63,8 @@ import {
 } from "./clearFeedback";
 import DungeonView from "./DungeonView";
 import EditableTextSection from "./EditableTextSection";
-import EventTimeline from "./EventTimeline";
 import PartySection from "./PartySection";
+import QuestChat from "./QuestChat";
 import QuestRefs from "./QuestRefs";
 import TagEditor from "./TagEditor";
 import UnclearConfirmDialog from "./UnclearConfirmDialog";
@@ -597,10 +597,12 @@ export function QuestDrawer({
 
               <QuestRefs projectId={projectId} quest={quest} />
 
-              <EventTimeline
+              <QuestChat
+                projectId={projectId}
+                questId={questId}
                 events={eventsQuery.data}
-                isPending={eventsQuery.isPending}
-                isError={eventsQuery.isError}
+                eventsPending={eventsQuery.isPending}
+                eventsError={eventsQuery.isError}
               />
             </>
           ) : null}

@@ -210,6 +210,23 @@ function stubFetch(quest: Quest = QUEST) {
       if (method === "GET" && url.pathname === "/api/projects/1/tags") {
         return jsonResponse([]);
       }
+      if (method === "GET" && url.pathname === "/api/quests/1/messages") {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
+      if (method === "GET" && url.pathname === "/api/projects/1") {
+        return jsonResponse({
+          project: { id: 1, name: "달빛 길드", createdAt: CREATED_AT },
+          members: [
+            {
+              userId: 7,
+              displayName: "김모험",
+              role: "owner",
+              xp: 0,
+              level: 1,
+            },
+          ],
+        });
+      }
 
       return jsonResponse(
         { error: { code: "not_found", message: "not found" } },
@@ -422,26 +439,18 @@ describe("QuestDrawer design", () => {
     expect(tagInput.className).toContain("border-line-strong");
   });
 
-  it("collapses the adventure log to key events and expands the full history", async () => {
+  it("shows the party chat heading and expands the full adventure log", async () => {
     const { dialog, user } = await openDrawer();
 
-    await screen.findByText(formatKoreanDateTime(EVENTS[0]!.createdAt));
-
-    // Collapsed: only the quest_posted key event is visible, without an icon.
-    const rows = Array.from(
-      dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveAttribute("data-event-id", "10");
-    expect(rows[0]?.querySelector("img")).toBeNull();
     expect(
-      within(rows[0]!).getByText(formatKoreanDateTime(EVENTS[0]!.createdAt)),
+      await within(dialog).findByRole("heading", {
+        name: ko.partyChat.title,
+      }),
     ).toBeInTheDocument();
-    expect(
-      rows[0]?.querySelectorAll("[data-segment]").length,
-    ).toBeGreaterThan(0);
-    expect(within(rows[0]!).getByText("'김모험'")).toBeInTheDocument();
 
+    // Collapsed: the adventure log keeps only its heading and toggle. The
+    // recent key events live in the party-chat timeline instead.
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
     const toggle = within(dialog).getByRole("button", {
       name: ko.board.drawer.showAllHistory(EVENTS.length),
     });
@@ -462,13 +471,20 @@ describe("QuestDrawer design", () => {
         within(dialog).getByText(formatKoreanDateTime(event.createdAt)),
       ).toBeInTheDocument();
     }
+    const first = dialog.querySelector<HTMLElement>("[data-event-id='10']");
+    expect(first).not.toBeNull();
+    expect(first?.querySelector("img")).toBeNull();
+    expect(
+      first?.querySelectorAll("[data-segment]").length,
+    ).toBeGreaterThan(0);
+    expect(within(first!).getByText("'김모험'")).toBeInTheDocument();
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(1);
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
   });
 
-  it("shows the empty key-event copy when only non-key events exist", async () => {
+  it("keeps non-key events out of the collapsed log and lists them when expanded", async () => {
     const onlyEdits = EVENTS.filter(
       (event) =>
         event.type !== "quest_posted" &&
@@ -492,6 +508,9 @@ describe("QuestDrawer design", () => {
         if (method === "GET" && url.pathname === "/api/projects/1/tags") {
           return jsonResponse([]);
         }
+        if (method === "GET" && url.pathname === "/api/quests/1/messages") {
+          return jsonResponse({ messages: [], hasMore: false });
+        }
         return jsonResponse(
           { error: { code: "not_found", message: "not found" } },
           404,
@@ -509,10 +528,24 @@ describe("QuestDrawer design", () => {
     const dialog = await screen.findByRole("dialog", {
       name: ko.board.drawer.title,
     });
-    expect(
-      await within(dialog).findByText(ko.board.drawer.keyEventsEmpty),
-    ).toBeInTheDocument();
+    await within(dialog).findByTestId("quest-dungeon-placeholder");
     expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
+    // The removed empty note must not come back.
+    expect(
+      within(dialog).queryByText("아직 큰 사건은 없습니다"),
+    ).toBeNull();
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: ko.board.drawer.showAllHistory(onlyEdits.length),
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        Array.from(
+          dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+        ).map((row) => Number(row.dataset.eventId)),
+      ).toEqual(onlyEdits.map((event) => event.id)),
+    );
   });
 
   it("keeps archive dangerous and confirms on paper with the hard shadow", async () => {

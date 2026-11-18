@@ -1,11 +1,12 @@
 // @vitest-environment node
 /**
- * Adventure-log collapse rules (F1 T08).
+ * Adventure-log contract (M2b T05).
  *
- * The drawer's 모험 기록 starts collapsed to the three latest key events. With
- * no key event at all the collapsed view says 아직 큰 사건은 없습니다; opening
- * "전체 기록 보기" must replace that note with every recorded event (key or
- * not), so the copy can never sit above a full list.
+ * The party chat now carries the key events, so the drawer's 모험 기록 keeps
+ * only its heading and the "전체 기록 보기 (N)" toggle until the adventurer asks
+ * for the history. Expanding lists every recorded event in chronological order
+ * (key or not); collapsing hides them again. With no events only the heading
+ * remains — there is no collapsed "최근 핵심 3건" list or empty note anymore.
  *
  * `QuestEvent["type"]` is also pinned to the shared union here: assigning it to
  * `QuestEventType` only compiles while the response schema exports the real
@@ -23,6 +24,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { EventTimeline } from "../src/components/quest/EventTimeline";
 import { ko } from "../src/i18n/ko";
+import { formatKoreanDateTime } from "../src/lib/format";
 
 const ACTOR = { id: 7, displayName: "김모험" };
 
@@ -64,33 +66,29 @@ afterEach(() => {
   cleanup();
 });
 
-describe("EventTimeline collapse", () => {
-  it("shows the empty key-event note only while collapsed", async () => {
-    const user = userEvent.setup();
-    const events = [
-      makeEvent(1, "quest_edited", { fields: ["tags"] }),
-      makeEvent(2, "quest_moved", { from: "board", to: "dungeon" }),
-    ];
-    const view = render(<EventTimeline events={events} />);
+describe("EventTimeline", () => {
+  it("keeps only the heading when no event exists", () => {
+    const view = render(<EventTimeline events={[]} />);
 
-    expect(view.getByText(ko.board.drawer.keyEventsEmpty)).toBeInTheDocument();
-    expect(eventIds(view.container)).toEqual([]);
+    expect(
+      view.getByRole("heading", { name: ko.board.drawer.history }),
+    ).toBeInTheDocument();
+    expect(view.container.querySelectorAll("[data-event-id]")).toHaveLength(0);
+    expect(view.queryByRole("button")).toBeNull();
+    expect(
+      view.queryByText("아직 큰 사건은 없습니다"),
+    ).toBeNull();
 
-    await user.click(
-      view.getByRole("button", {
-        name: ko.board.drawer.showAllHistory(events.length),
-      }),
-    );
-
-    expect(view.queryByText(ko.board.drawer.keyEventsEmpty)).toBeNull();
-    expect(eventIds(view.container)).toEqual([1, 2]);
+    view.rerender(<EventTimeline events={undefined} />);
+    expect(view.queryByRole("button")).toBeNull();
+    expect(view.container.querySelectorAll("[data-event-id]")).toHaveLength(0);
   });
 
-  it("lists only key events while collapsed and every event once expanded", async () => {
+  it("shows only the toggle until expanded, then lists every event in order", async () => {
     const user = userEvent.setup();
     const events = [
-      makeEvent(1, "quest_edited", { fields: ["tags"] }),
-      makeEvent(2, "quest_posted", { number: 12, title: "로그인 버그" }),
+      makeEvent(1, "quest_posted", { number: 12, title: "로그인 버그" }),
+      makeEvent(2, "quest_edited", { fields: ["tags"] }),
       makeEvent(3, "ref_added", {
         refId: 4,
         target: "docs/login.md",
@@ -99,20 +97,40 @@ describe("EventTimeline collapse", () => {
     ];
     const view = render(<EventTimeline events={events} />);
 
-    expect(view.queryByText(ko.board.drawer.keyEventsEmpty)).toBeNull();
-    expect(eventIds(view.container)).toEqual([2]);
+    // Collapsed: heading + toggle only; no recent key events and no note.
+    expect(eventIds(view.container)).toEqual([]);
+    expect(
+      view.queryByText("아직 큰 사건은 없습니다"),
+    ).toBeNull();
 
-    await user.click(
-      view.getByRole("button", {
-        name: ko.board.drawer.showAllHistory(events.length),
-      }),
-    );
+    const toggle = view.getByRole("button", {
+      name: ko.board.drawer.showAllHistory(events.length),
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
 
-    expect(view.queryByText(ko.board.drawer.keyEventsEmpty)).toBeNull();
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(eventIds(view.container)).toEqual([1, 2, 3]);
+    // Key and non-key events are rendered exactly like the old expanded state:
+    // one bordered row each with its full timestamp and styled segments.
+    for (const event of events) {
+      expect(
+        view.getByText(formatKoreanDateTime(event.createdAt)),
+      ).toBeInTheDocument();
+    }
+    const first = view.container.querySelector<HTMLElement>(
+      "[data-event-id='1']",
+    );
+    expect(first?.querySelectorAll("[data-segment]").length).toBeGreaterThan(0);
+    expect(first?.querySelector("img")).toBeNull();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(eventIds(view.container)).toEqual([]);
   });
 
-  it("renders both checklist and legacy floor_checked payloads", async () => {
+  it("renders both checklist and legacy floor_checked payloads when expanded", async () => {
     const user = userEvent.setup();
     const events = [
       makeEvent(1, "floor_checked", { text: "재현 확인", done: true }),
@@ -124,16 +142,12 @@ describe("EventTimeline collapse", () => {
     ];
     const view = render(<EventTimeline events={events} />);
 
-    // Both are non-key events, so the collapsed log stays empty.
-    expect(view.getByText(ko.board.drawer.keyEventsEmpty)).toBeInTheDocument();
-
     await user.click(
       view.getByRole("button", {
         name: ko.board.drawer.showAllHistory(events.length),
       }),
     );
 
-    expect(view.queryByText(ko.board.drawer.keyEventsEmpty)).toBeNull();
     expect(view.container).toHaveTextContent(
       "'김모험' 가 '재현 확인' 을 돌파했습니다.",
     );

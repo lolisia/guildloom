@@ -36,6 +36,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import QuestCard, {
   floorProgressPercent,
+  UNREAD_DISPLAY_CAP,
 } from "../src/components/board/QuestCard";
 import { ko } from "../src/i18n/ko";
 import { queryKeys } from "../src/lib/queryKeys";
@@ -133,6 +134,7 @@ function stubFetch(nominations: MyNomination[] = []) {
 function renderCard(
   cardQuest: QuestSummary,
   nominations: MyNomination[] = [],
+  unreadMessages?: number,
 ) {
   const fetchMock = stubFetch(nominations);
   const queryClient = new QueryClient({
@@ -150,7 +152,11 @@ function renderCard(
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <QuestCard quest={cardQuest} onOpen={onOpen} />
+      <QuestCard
+        quest={cardQuest}
+        onOpen={onOpen}
+        unreadMessages={unreadMessages}
+      />
     </QueryClientProvider>,
   );
 
@@ -650,5 +656,50 @@ describe("QuestCard M2a data", () => {
     const chip = featureCard.querySelector('[data-kind="feature"]');
     expect(chip).toHaveTextContent(ko.quest.kinds.feature);
     expect(chip).toHaveClass("border", "border-line", "text-[12px]");
+  });
+});
+
+describe("QuestCard unread party messages", () => {
+  it("renders the 새 글 chip directly after the bounty in the meta row", () => {
+    const { card } = renderCard(quest(), [], 3);
+
+    const chip = within(card).getByTestId("card-unread");
+    expect(chip).toHaveTextContent("새 글 3");
+    expect(chip).toHaveClass(
+      "inline-flex",
+      "items-center",
+      "rounded-sm",
+      "border",
+      "border-line",
+      "px-1",
+      "py-0",
+      "text-xs",
+      "text-muted",
+    );
+
+    const meta = card.querySelector<HTMLElement>("[data-testid='card-meta']");
+    expect(meta).not.toBeNull();
+    // The chip follows the bounty number, before the multiplier/nominations.
+    const bounty = within(meta!).getByText("150");
+    expect(bounty.parentElement?.nextElementSibling).toBe(chip);
+  });
+
+  it("renders nothing for zero, negative or missing unread counts", () => {
+    const { card: zero } = renderCard(quest(), [], 0);
+    expect(within(zero).queryByTestId("card-unread")).toBeNull();
+
+    const { card: negative } = renderCard(quest(), [], -2);
+    expect(within(negative).queryByTestId("card-unread")).toBeNull();
+
+    const { card: missing } = renderCard(quest());
+    expect(within(missing).queryByTestId("card-unread")).toBeNull();
+  });
+
+  it("caps the chip at 99+", () => {
+    const { card } = renderCard(quest(), [], UNREAD_DISPLAY_CAP + 20);
+
+    expect(within(card).getByTestId("card-unread")).toHaveTextContent(
+      "새 글 99+",
+    );
   });
 });

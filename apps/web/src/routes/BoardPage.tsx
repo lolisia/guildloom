@@ -29,6 +29,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
+import { fetchChatUnread } from "../api/chat";
 import { fetchQuests, moveQuest } from "../api/quests";
 import BoardColumn from "../components/board/BoardColumn";
 import QuickAdd from "../components/board/QuickAdd";
@@ -102,6 +103,20 @@ export default function BoardPage() {
     queryFn: ({ signal }) => fetchQuests(projectId, BOARD_FILTERS, signal),
     enabled: parsedProjectId !== null,
   });
+
+  const unreadQuery = useQuery({
+    queryKey: queryKeys.chatUnread(projectId),
+    queryFn: ({ signal }) => fetchChatUnread(projectId, signal),
+    enabled: parsedProjectId !== null,
+  });
+
+  const unreadByQuest = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const entry of unreadQuery.data?.quests ?? []) {
+      map.set(entry.questId, entry.count);
+    }
+    return map;
+  }, [unreadQuery.data]);
 
   const columns = useMemo(
     () => groupQuestsByStage(questsQuery.data ?? []),
@@ -353,6 +368,7 @@ export default function BoardPage() {
               stage={stage}
               quests={columns[stage]}
               onOpenQuest={openQuest}
+              unreadByQuest={unreadByQuest}
             >
               {stage === "board" ? (
                 <QuickAdd projectId={projectId} inputRef={quickAddRef} />

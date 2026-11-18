@@ -181,6 +181,9 @@ function stubApi(initialQuest: Quest, options: StubOptions = {}) {
       if (method === "GET" && path === "/api/quests/1/events") {
         return jsonResponse([]);
       }
+      if (method === "GET" && path === "/api/quests/1/messages") {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
 
       if (method === "POST" && options.failPost?.path === path) {
         return errorResponse(options.failPost.status, "conflict");
