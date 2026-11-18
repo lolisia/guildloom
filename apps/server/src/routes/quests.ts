@@ -795,8 +795,14 @@ function listProjectQuests(
   });
 }
 
-/** Create one quest plus its `quest_posted` event inside a transaction. */
-function createQuest(
+/**
+ * Create one quest plus its `quest_posted` event inside a transaction.
+ *
+ * Exported for the tavern chat route, which promotes a chat message into a
+ * quest inside its own (outer) transaction; the nested call then acts as a
+ * savepoint.
+ */
+export function createQuest(
   db: AppDb,
   projectId: number,
   actor: UserRow,

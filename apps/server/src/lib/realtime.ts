@@ -26,6 +26,13 @@ export interface QuestChangedEvent {
   questId: number;
 }
 
+/** Payload of the `chat:changed` server event. */
+export interface ChatChangedEvent {
+  projectId: number;
+  /** Thread that changed: a quest id, or `null` for the guild tavern. */
+  questId: number | null;
+}
+
 /** Payload of the `notification:new` server event. */
 export interface NotificationNewEvent {
   notification: Notification;
@@ -62,6 +69,13 @@ export interface XpChangedInput {
 export interface Realtime {
   /** Tell `project:<projectId>` that a quest row changed. */
   emitQuestChanged(projectId: number, questId: number): void;
+  /**
+   * Tell `project:<projectId>` that a chat thread changed.
+   *
+   * Only an invalidation signal: clients refetch the thread themselves, so no
+   * message data ever travels over the socket.
+   */
+  emitChatChanged(projectId: number, questId: number | null): void;
   /** Deliver a notification to `user:<userId>`. */
   emitNotification(userId: number, notification: Notification): void;
   /**
@@ -77,6 +91,7 @@ export interface Realtime {
 export function createNoopRealtime(): Realtime {
   return {
     emitQuestChanged() {},
+    emitChatChanged() {},
     emitNotification() {},
     emitXpChanged() {},
     emitMembersChanged() {},
@@ -89,6 +104,7 @@ export const noopRealtime: Realtime = createNoopRealtime();
 /** Events the server sends to clients. */
 export interface ServerToClientEvents {
   "quest:changed": (payload: QuestChangedEvent) => void;
+  "chat:changed": (payload: ChatChangedEvent) => void;
   "notification:new": (payload: NotificationNewEvent) => void;
   "xp:changed": (payload: XpChangedEvent) => void;
   "members:changed": (payload: MembersChangedEvent) => void;
@@ -288,6 +304,13 @@ export function attachRealtime(
   const realtime: Realtime = {
     emitQuestChanged(projectId, questId) {
       io.to(projectRoom(projectId)).emit("quest:changed", {
+        projectId,
+        questId,
+      });
+    },
+
+    emitChatChanged(projectId, questId) {
+      io.to(projectRoom(projectId)).emit("chat:changed", {
         projectId,
         questId,
       });

@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import type { LevelUp, Notification } from "@guildloom/shared";
 
 import type {
+  ChatChangedEvent,
   MembersChangedEvent,
   QuestChangedEvent,
   XpChangedEvent,
@@ -648,6 +649,88 @@ describe("realtime", () => {
         { projectId: project.id, questId },
         { projectId: project.id, questId: barrierQuestId },
       ]);
+    } finally {
+      socket.close();
+      await running.close();
+    }
+  });
+
+  it("broadcasts chat:changed for tavern and party messages", async () => {
+    const running = await startRealtimeApp();
+    const { app, db } = running;
+    const owner = createUser(db, { loginId: "owner" });
+    const member = createUser(db, { loginId: "member" });
+    const project = createProject(db, { ownerId: owner.id });
+    addMember(db, project.id, member.id);
+    const ownerCookie = createSessionCookie(db, owner.id);
+
+    const socket = connectClient(running.url, {
+      cookie: createSessionCookie(db, member.id),
+    });
+
+    try {
+      await waitForConnect(socket);
+      await expect(subscribe(socket, project.id)).resolves.toEqual({
+        ok: true,
+      });
+
+      const tavernEvent = waitForEvent<ChatChangedEvent>(
+        socket,
+        "chat:changed",
+      );
+      const tavernResponse = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/tavern/messages`,
+        headers: { cookie: ownerCookie },
+        payload: { body: "여관 인사" },
+      });
+      expect(tavernResponse.statusCode).toBe(201);
+      await expect(tavernEvent).resolves.toEqual({
+        projectId: project.id,
+        questId: null,
+      });
+
+      const createdResponse = await app.inject({
+        method: "POST",
+        url: `/api/projects/${project.id}/quests`,
+        headers: { cookie: ownerCookie },
+        payload: { title: "채팅 방송 퀘스트" },
+      });
+      expect(createdResponse.statusCode).toBe(201);
+      const questId = createdResponse.json<{ id: number }>().id;
+
+      const partyEvent = waitForEvent<ChatChangedEvent>(
+        socket,
+        "chat:changed",
+      );
+      const partyResponse = await app.inject({
+        method: "POST",
+        url: `/api/quests/${questId}/messages`,
+        headers: { cookie: ownerCookie },
+        payload: { body: "파티 인사" },
+      });
+      expect(partyResponse.statusCode).toBe(201);
+      await expect(partyEvent).resolves.toEqual({
+        projectId: project.id,
+        questId,
+      });
+
+      // Deleting a message broadcasts the same invalidation signal.
+      const tavernMessageId = tavernResponse.json<{ id: number }>().id;
+      const deleteEvent = waitForEvent<ChatChangedEvent>(
+        socket,
+        "chat:changed",
+      );
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/messages/${tavernMessageId}`,
+        headers: { cookie: ownerCookie },
+      });
+      expect(deleteResponse.statusCode).toBe(204);
+      await expect(deleteEvent).resolves.toEqual({
+        projectId: project.id,
+        questId: null,
+      });
     } finally {
       socket.close();
       await running.close();
