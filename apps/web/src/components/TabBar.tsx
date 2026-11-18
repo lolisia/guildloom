@@ -8,7 +8,7 @@
  * (no tab icons), and a gold XP bar that is the only reward accent in the
  * shell. The guild logo keeps the pack's 32px crest.
  */
-import { levelFromXp, levelProgress } from "@guildloom/shared";
+import { levelFromXp, levelProgress, UNREAD_DISPLAY_CAP } from "@guildloom/shared";
 import type { MeResponse, Project, ProjectSummary } from "@guildloom/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { fetchMe, logout } from "../api/auth";
+import { fetchChatUnread } from "../api/chat";
 import { createProject, fetchProjects } from "../api/projects";
 import { ko } from "../i18n/ko";
 import { isImeComposing } from "../lib/ime";
@@ -81,6 +82,19 @@ export function TabBar() {
     enabled: user !== null,
   });
 
+  const chatUnreadQuery = useQuery({
+    queryKey: queryKeys.chatUnread(activeProjectId ?? 0),
+    queryFn: ({ signal }) => {
+      if (activeProjectId === null) {
+        throw new Error("no active guild");
+      }
+      return fetchChatUnread(activeProjectId, signal);
+    },
+    enabled: activeProjectId !== null,
+    retry: false,
+  });
+  const tavernUnread = chatUnreadQuery.data?.tavern ?? 0;
+
   const createMutation = useMutation({
     mutationFn: (name: string) => createProject({ name }),
     onSuccess: async (project: Project) => {
@@ -123,6 +137,9 @@ export function TabBar() {
   const isBoard =
     activeProjectId !== null &&
     location.pathname === `/g/${activeProjectId}`;
+  const isTavern =
+    activeProjectId !== null &&
+    location.pathname === `/g/${activeProjectId}/tavern`;
   const isLedger =
     activeProjectId !== null &&
     location.pathname === `/g/${activeProjectId}/ledger`;
@@ -240,6 +257,24 @@ export function TabBar() {
               className={tabClasses(VIEW_TAB_CLASSES, isBoard)}
             >
               <span>{ko.tabs.board}</span>
+            </Link>
+            <Link
+              to={`/g/${activeProjectId}/tavern`}
+              aria-current={isTavern ? "page" : undefined}
+              className={tabClasses(VIEW_TAB_CLASSES, isTavern)}
+            >
+              <span>{ko.tabs.tavern}</span>
+              {tavernUnread > 0 ? (
+                <span
+                  data-testid="tavern-unread-badge"
+                  aria-label={ko.chat.unreadBadge(tavernUnread)}
+                  className="ml-1 inline-flex min-w-4 items-center justify-center rounded-sm border border-line bg-sunken px-1 font-pixel text-[12px] leading-4 text-ink"
+                >
+                  {tavernUnread > UNREAD_DISPLAY_CAP
+                    ? `${UNREAD_DISPLAY_CAP}+`
+                    : tavernUnread}
+                </span>
+              ) : null}
             </Link>
             <Link
               to={`/g/${activeProjectId}/ledger`}

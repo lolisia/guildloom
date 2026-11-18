@@ -32,4 +32,11 @@ export const queryKeys = {
   notifications: ["notifications"] as const,
   /** `GET /api/me/nominations` (the adventurer's pending nominations). */
   myNominations: ["myNominations"] as const,
+  /** `GET /api/projects/:projectId/tavern/messages` (infinite pages). */
+  tavernMessages: (projectId: number) =>
+    ["tavernMessages", projectId] as const,
+  /** `GET /api/quests/:questId/messages` (infinite pages). */
+  questMessages: (questId: number) => ["questMessages", questId] as const,
+  /** `GET /api/projects/:projectId/chat/unread` */
+  chatUnread: (projectId: number) => ["chatUnread", projectId] as const,
 };

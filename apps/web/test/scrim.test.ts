@@ -260,6 +260,8 @@ describe("scrim call sites", () => {
       ["components/quest/UnclearConfirmDialog.tsx", 1], // clear revocation
       ["components/board/QuickAdd.tsx", 1], // bulk-paste confirm
       ["components/TabBar.tsx", 1], // create-guild dialog
+      ["components/chat/MessageRow.tsx", 1], // delete-message confirm
+      ["components/chat/CreateQuestFromMessageDialog.tsx", 1], // 의뢰로 만들기
     ] as const;
 
     let total = 0;
@@ -269,7 +271,7 @@ describe("scrim call sites", () => {
       expect(uses, `${file} overlay count`).toHaveLength(expected);
       total += uses.length;
     }
-    expect(total).toBe(6);
+    expect(total).toBe(8);
   });
 
   it("keeps the alpha inside the token instead of an opacity modifier", () => {
@@ -285,6 +287,8 @@ describe("scrim call sites", () => {
       "components/quest/QuestDrawer.tsx",
       "components/board/QuickAdd.tsx",
       "components/TabBar.tsx",
+      "components/chat/MessageRow.tsx",
+      "components/chat/CreateQuestFromMessageDialog.tsx",
     ]) {
       expect(
         readSource(join(SRC_DIR, ...file.split("/"))),

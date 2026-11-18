@@ -31,6 +31,7 @@ import LedgerPage from "./routes/LedgerPage";
 import LoginPage from "./routes/LoginPage";
 import RootRedirect from "./routes/RootRedirect";
 import SetupPage from "./routes/SetupPage";
+import TavernPage from "./routes/TavernPage";
 
 /** Canonical route paths so later tasks do not hard-code strings. */
 export const routePaths = {
@@ -39,6 +40,7 @@ export const routePaths = {
   login: "/login",
   invite: (code: string) => `/invite/${encodeURIComponent(code)}`,
   project: (projectId: number | string) => `/g/${projectId}`,
+  tavern: (projectId: number | string) => `/g/${projectId}/tavern`,
   ledger: (projectId: number | string) => `/g/${projectId}/ledger`,
   settings: (projectId: number | string) => `/g/${projectId}/settings`,
 } as const;
@@ -155,6 +157,7 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path={routePaths.home} element={<RootRedirect />} />
           <Route path="/g/:projectId" element={<BoardPage />} />
+          <Route path="/g/:projectId/tavern" element={<TavernPage />} />
           <Route path="/g/:projectId/ledger" element={<LedgerPage />} />
           <Route path="/g/:projectId/settings" element={<GuildSettingsPage />} />
         </Route>
