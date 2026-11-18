@@ -14,6 +14,7 @@
  */
 import {
   MEMBER_STATUSES,
+  MESSAGE_KINDS,
   NOMINATION_KINDS,
   NOMINATION_STATES,
   NOTIFICATION_TYPES,
@@ -319,6 +320,76 @@ export const notifications = sqliteTable(
   ],
 );
 
+/**
+ * Guild chat messages.
+ *
+ * `quest_id` NULL is the guild tavern; a quest id is that quest's party room.
+ * Mentions are stored in `body` as `<@userId>` tokens. System messages carry an
+ * empty body and put their details in `payload` (a JSON string). `familiar_id`
+ * is reserved for M4 familiars and intentionally has no foreign key, matching
+ * `quest_events`.
+ */
+export const messages = sqliteTable(
+  "messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    questId: integer("quest_id").references(() => quests.id, {
+      onDelete: "cascade",
+    }),
+    kind: text("kind", { enum: MESSAGE_KINDS }).notNull(),
+    // The actor for system messages; deleted accounts keep their messages.
+    authorUserId: integer("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // Reserved for M4 familiars; intentionally no foreign key.
+    familiarId: integer("familiar_id"),
+    body: text("body").notNull(),
+    payload: text("payload"),
+    // Set on the system message that turned a chat message into a quest.
+    promotedQuestId: integer("promoted_quest_id").references(() => quests.id, {
+      onDelete: "set null",
+    }),
+    createdAt: integer("created_at", { mode: "number" }).notNull(),
+    deletedAt: integer("deleted_at", { mode: "number" }),
+  },
+  (table) => [
+    index("messages_project_quest_id_idx").on(
+      table.projectId,
+      table.questId,
+      table.id,
+    ),
+  ],
+);
+
+/**
+ * Per-user read marker for one chat thread: the tavern (`thread_quest_id` 0)
+ * or a quest party room. `thread_quest_id` has no foreign key because SQLite
+ * does not dedupe NULLs in a composite primary key, so the tavern needs an
+ * explicit 0 instead of NULL.
+ */
+export const readCursors = sqliteTable(
+  "read_cursors",
+  {
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    threadQuestId: integer("thread_quest_id").notNull().default(0),
+    lastReadMessageId: integer("last_read_message_id").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.userId, table.projectId, table.threadQuestId],
+    }),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
@@ -333,3 +404,5 @@ export type QuestNominationRow = typeof questNominations.$inferSelect;
 export type QuestRefRow = typeof questRefs.$inferSelect;
 export type XpLedgerRow = typeof xpLedger.$inferSelect;
 export type NotificationRow = typeof notifications.$inferSelect;
+export type MessageRow = typeof messages.$inferSelect;
+export type ReadCursorRow = typeof readCursors.$inferSelect;
