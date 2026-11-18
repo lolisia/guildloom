@@ -53,6 +53,10 @@ const notificationTemplates = {
   quest_cleared: (quest: string): string => `${quest}를 클리어했습니다.`,
   clear_revoked: (actor: string, quest: string, xpRevoked: number): string =>
     `${actor}님이 ${quest}의 클리어를 취소했습니다. (XP ${xpRevoked.toLocaleString("ko-KR")} 회수)`,
+  mentioned: (actor: string, quest: string | null, excerpt: string): string =>
+    quest === null
+      ? `${actor} 가 주점에서 나를 불렀습니다: "${excerpt}"`
+      : `${actor} 가 ${quest} 파티 채팅에서 나를 불렀습니다: "${excerpt}"`,
 };
 
 /** XP taken back by a `clear_revoked` notification payload. */
@@ -62,6 +66,15 @@ function revokedXp(payload: unknown): number {
   }
   const value = (payload as { xpRevoked?: unknown }).xpRevoked;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/** Message excerpt quoted by a `mentioned` notification payload. */
+function mentionExcerpt(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    return "";
+  }
+  const value = (payload as { excerpt?: unknown }).excerpt;
+  return typeof value === "string" ? value : "";
 }
 
 /** Render a notification row (and its toast) as one Korean sentence. */
@@ -91,6 +104,12 @@ function formatNotification(notification: Notification): string {
         actor,
         quest,
         revokedXp(notification.payload),
+      );
+    case "mentioned":
+      return notificationTemplates.mentioned(
+        actor,
+        notification.questId === null ? null : quest,
+        mentionExcerpt(notification.payload),
       );
   }
 }
