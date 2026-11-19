@@ -38,7 +38,12 @@ export interface QuestCardProps {
   quest: QuestSummary;
   /** Called with the quest id when the card is clicked or activated by key. */
   onOpen: (questId: number) => void;
+  /** Unread party-chat messages; zero renders nothing. */
+  unreadMessages?: number;
 }
+
+/** Highest unread count shown on the card before it becomes `99+`. */
+export const UNREAD_DISPLAY_CAP = 99;
 
 /** Width of the floor progress bar, clamped to 0–100%. */
 export function floorProgressPercent(done: number, total: number): number {
@@ -58,7 +63,11 @@ export function formatBounty(total: number): string {
 }
 
 /** Board card for a quest. */
-export function QuestCard({ quest, onOpen }: QuestCardProps) {
+export function QuestCard({
+  quest,
+  onOpen,
+  unreadMessages = 0,
+}: QuestCardProps) {
   const {
     attributes,
     listeners,
@@ -206,6 +215,19 @@ export function QuestCard({ quest, onOpen }: QuestCardProps) {
             {formatBounty(quest.bounty.total)}
           </span>
         </span>
+
+        {unreadMessages > 0 ? (
+          <span
+            data-testid="card-unread"
+            className="inline-flex items-center gap-1 rounded-sm border border-line px-1 py-0 text-xs text-muted"
+          >
+            {ko.board.unreadMessages(
+              unreadMessages > UNREAD_DISPLAY_CAP
+                ? `${UNREAD_DISPLAY_CAP}+`
+                : unreadMessages,
+            )}
+          </span>
+        ) : null}
 
         {quest.bounty.multiplier > 1 ? (
           <span className="inline-flex items-center rounded-sm border border-gold px-1 py-0 font-pixel text-[12px] text-gold">

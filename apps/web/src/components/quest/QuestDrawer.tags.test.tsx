@@ -183,6 +183,23 @@ function stubFetch({ eventsAfterFirst = [] }: StubFetchOptions = {}) {
       if (method === "GET" && url.pathname === "/api/projects/1/tags") {
         return jsonResponse([]);
       }
+      if (method === "GET" && url.pathname === "/api/quests/1/messages") {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
+      if (method === "GET" && url.pathname === "/api/projects/1") {
+        return jsonResponse({
+          project: { id: 1, name: "달빛 길드", createdAt: 1_768_000_000_000 },
+          members: [
+            {
+              userId: 1,
+              displayName: "김모험",
+              role: "owner",
+              xp: 0,
+              level: 1,
+            },
+          ],
+        });
+      }
       if (method === "PATCH" && url.pathname === "/api/quests/1") {
         patchBodies.push(
           JSON.parse(String(init.body)) as Record<string, unknown>,
@@ -287,7 +304,6 @@ describe("QuestDrawer tags", () => {
     const { user } = renderDrawer();
 
     await screen.findByDisplayValue("Alpha");
-    await screen.findByText(ko.board.drawer.keyEventsEmpty);
     await waitFor(() => expect(getEventsRequestCount()).toBe(1));
 
     const tagInput = screen.getByRole("textbox", { name: ko.quest.tagAdd });

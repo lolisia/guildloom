@@ -225,6 +225,7 @@ function recordRealtime(): RecordedRealtime {
     emitQuestChanged(projectId, questId) {
       recorded.quests.push({ projectId, questId });
     },
+    emitChatChanged() {},
     emitNotification(userId, notification) {
       recorded.notifications.push({ userId, notification });
     },

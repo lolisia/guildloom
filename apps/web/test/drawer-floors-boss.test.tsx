@@ -14,8 +14,8 @@
  *   placeholders;
  * - reference documents are added on Enter, URLs open in a new tab, paths copy
  *   and rows delete through `DELETE /api/refs/:id`;
- * - the adventure log is collapsed to the three most recent key events and
- *   expands to the full history;
+ * - the adventure log keeps only its toggle until expanded, then lists every
+ *   recorded event;
  * - the boss banner renders the waiting copy, retry cannot be submitted with a
  *   blank comment and clearing opens the clear-preview confirmation, then
  *   queues the 10s toast with the caller's own XP and opens the T06 LEVEL UP
@@ -279,6 +279,23 @@ function stubApi(initialQuest: Quest, options: StubOptions = {}) {
       }
       if (method === "GET" && path === "/api/projects/1/tags") {
         return jsonResponse([]);
+      }
+      if (method === "GET" && path === "/api/quests/1/messages") {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
+      if (method === "GET" && path === "/api/projects/1") {
+        return jsonResponse({
+          project: { id: 1, name: "달빛 길드", createdAt: NOW },
+          members: [
+            {
+              userId: HERO.id,
+              displayName: HERO.displayName,
+              role: "owner",
+              xp: 0,
+              level: 1,
+            },
+          ],
+        });
       }
 
       if (method === "PATCH" && path === "/api/quests/1") {
@@ -897,18 +914,11 @@ describe("QuestDrawer adventure log", () => {
     makeEvent(7, "clear_revoked", NOW + 500),
   ];
 
-  it("collapses to the three most recent key events and expands the full history", async () => {
+  it("keeps the history hidden until expanded, then lists every event in order", async () => {
     const { dialog, user } = await openDrawer(baseQuest(), { events });
 
-    const collapsed = Array.from(
-      dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
-    );
-    expect(collapsed.map((row) => Number(row.dataset.eventId))).toEqual([
-      5, 6, 7,
-    ]);
-    expect(collapsed.every((row) => row.querySelector("img") === null)).toBe(
-      true,
-    );
+    // The party chat carries the key events; the log starts with its toggle.
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
 
     const toggle = within(dialog).getByRole("button", {
       name: ko.board.drawer.showAllHistory(events.length),
@@ -924,13 +934,18 @@ describe("QuestDrawer adventure log", () => {
         ).map((row) => Number(row.dataset.eventId)),
       ).toEqual([1, 2, 3, 4, 5, 6, 7]),
     );
+    expect(
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>("[data-event-id]"),
+      ).every((row) => row.querySelector("img") === null),
+    ).toBe(true);
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(3);
+    expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
   });
 
-  it("shows '아직 큰 사건은 없습니다' when only non-key events exist", async () => {
+  it("keeps non-key events out of the collapsed history and lists them when expanded", async () => {
     const { dialog, user } = await openDrawer(baseQuest(), {
       events: [
         makeEvent(1, "quest_edited", NOW + 100),
@@ -938,20 +953,17 @@ describe("QuestDrawer adventure log", () => {
       ],
     });
 
-    expect(
-      within(dialog).getByText(ko.board.drawer.keyEventsEmpty),
-    ).toBeInTheDocument();
     expect(dialog.querySelectorAll("[data-event-id]")).toHaveLength(0);
+    // The old collapsed "아직 큰 사건은 없습니다" note is gone.
+    expect(
+      within(dialog).queryByText("아직 큰 사건은 없습니다"),
+    ).toBeNull();
 
-    // Expanding replaces the note with the full history.
     await user.click(
       within(dialog).getByRole("button", {
         name: ko.board.drawer.showAllHistory(2),
       }),
     );
-    expect(
-      within(dialog).queryByText(ko.board.drawer.keyEventsEmpty),
-    ).toBeNull();
     await waitFor(() =>
       expect(
         Array.from(

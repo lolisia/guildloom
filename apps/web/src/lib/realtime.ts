@@ -47,12 +47,24 @@ export interface MembersChangedEvent {
   projectId: number;
 }
 
+/**
+ * `chat:changed` payload: a room got a new or edited message.
+ *
+ * `questId: null` identifies the tavern; a numeric id identifies that quest's
+ * party room. The guild's unread badges are stale either way.
+ */
+export interface ChatChangedEvent {
+  projectId: number;
+  questId: number | null;
+}
+
 /** Events the server sends to the web client. */
 export interface RealtimeServerToClientEvents {
   "quest:changed": (payload: QuestChangedEvent) => void;
   "notification:new": (payload: NotificationNewEvent) => void;
   "xp:changed": (payload: XpChangedEvent) => void;
   "members:changed": (payload: MembersChangedEvent) => void;
+  "chat:changed": (payload: ChatChangedEvent) => void;
 }
 
 /** Events the web client sends to the server. */
@@ -155,11 +167,24 @@ export function useRealtime(projectId: number | null): void {
       });
     };
 
+    const handleChatChanged = (payload: ChatChangedEvent): void => {
+      void queryClient.invalidateQueries({
+        queryKey:
+          payload.questId === null
+            ? queryKeys.tavernMessages(payload.projectId)
+            : queryKeys.questMessages(payload.questId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chatUnread(payload.projectId),
+      });
+    };
+
     socket.on("connect", handleConnect);
     socket.on("quest:changed", handleQuestChanged);
     socket.on("notification:new", handleNotification);
     socket.on("xp:changed", handleXpChanged);
     socket.on("members:changed", handleMembersChanged);
+    socket.on("chat:changed", handleChatChanged);
 
     // A mock or a very fast transport may already be connected before the
     // listeners above were attached.
@@ -173,6 +198,7 @@ export function useRealtime(projectId: number | null): void {
       socket.off("notification:new", handleNotification);
       socket.off("xp:changed", handleXpChanged);
       socket.off("members:changed", handleMembersChanged);
+      socket.off("chat:changed", handleChatChanged);
       socket.disconnect();
       if (socketRef.current === socket) {
         socketRef.current = null;

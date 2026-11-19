@@ -117,6 +117,7 @@ function recordRealtime(): Array<{ projectId: number; questId: number }> {
     emitQuestChanged(projectId, questId) {
       quests.push({ projectId, questId });
     },
+    emitChatChanged() {},
     emitNotification(_userId: number, _notification: Notification) {},
     emitXpChanged(_input: XpChangedInput) {},
     emitMembersChanged() {},

@@ -32,6 +32,8 @@ export interface BoardColumnProps {
   stage: BoardStage;
   quests: QuestSummary[];
   onOpenQuest: (questId: number) => void;
+  /** Unread party-chat counts keyed by quest id. */
+  unreadByQuest?: ReadonlyMap<number, number>;
   /** Optional content rendered between the header and the cards (quick add). */
   children?: ReactNode;
 }
@@ -41,6 +43,7 @@ export function BoardColumn({
   stage,
   quests,
   onOpenQuest,
+  unreadByQuest,
   children,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: columnDropId(stage) });
@@ -81,6 +84,7 @@ export function BoardColumn({
                 key={quest.id}
                 quest={quest}
                 onOpen={onOpenQuest}
+                unreadMessages={unreadByQuest?.get(quest.id) ?? 0}
               />
             ))
           )}

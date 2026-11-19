@@ -234,6 +234,9 @@ function boardHandler(quests: QuestSummary[] = QUESTS): MockHandler {
     if (method === "GET" && url.pathname === "/api/projects/1/tags") {
       return { body: [] };
     }
+    if (method === "GET" && url.pathname === "/api/projects/1/chat/unread") {
+      return { body: { tavern: 0, quests: [] } };
+    }
     return undefined;
   };
 }

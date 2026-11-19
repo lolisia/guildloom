@@ -236,6 +236,42 @@ describe("useRealtime", () => {
     });
   });
 
+  it("invalidates the matching chat room and unread badges on chat:changed", async () => {
+    const view = setupRealtime(4);
+    await connect();
+
+    act(() => {
+      realtime.emitServer("chat:changed", { projectId: 4, questId: null });
+    });
+
+    await waitFor(() => {
+      expect(view.invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["tavernMessages", 4],
+      });
+      expect(view.invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["chatUnread", 4],
+      });
+    });
+
+    view.invalidateSpy.mockClear();
+
+    act(() => {
+      realtime.emitServer("chat:changed", { projectId: 4, questId: 9 });
+    });
+
+    await waitFor(() => {
+      expect(view.invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["questMessages", 9],
+      });
+      expect(view.invalidateSpy).toHaveBeenCalledWith({
+        queryKey: ["chatUnread", 4],
+      });
+    });
+    expect(view.invalidateSpy).not.toHaveBeenCalledWith({
+      queryKey: ["tavernMessages", 4],
+    });
+  });
+
   it("leaves the previous guild on switch and refreshes active queries after a reconnect", async () => {
     const view = setupRealtime(4);
     await connect();
@@ -289,6 +325,7 @@ describe("useRealtime", () => {
     // observed exactly once.
     expect(realtime.handlers.get("quest:changed")?.size).toBe(1);
     expect(realtime.handlers.get("notification:new")?.size).toBe(1);
+    expect(realtime.handlers.get("chat:changed")?.size).toBe(1);
 
     act(() => {
       realtime.socket.connected = true;

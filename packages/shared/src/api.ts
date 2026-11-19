@@ -10,6 +10,10 @@ import { z } from "zod";
 import {
   ACTIVE_MEMBER_STATUSES,
   MEMBER_STATUSES,
+  MESSAGE_KINDS,
+  MESSAGE_MAX_LENGTH,
+  MESSAGE_PAGE_DEFAULT,
+  MESSAGE_PAGE_MAX,
   NOMINATION_KINDS,
   NOMINATION_STATES,
   NOTIFICATION_TYPES,
@@ -389,6 +393,99 @@ export const questSchema = questSummarySchema.extend({
   firstClaimedAt: timestampSchema.nullable(),
 });
 export type Quest = z.infer<typeof questSchema>;
+
+/** Chat message kind enum (`user` or `system`). */
+export const messageKindSchema = z.enum(MESSAGE_KINDS);
+
+/**
+ * A chat message in the tavern (`questId: null`) or a quest party room.
+ *
+ * `promotedQuest` is set on a system message that turned the source message
+ * into a quest, and `deletedAt` hides a message without dropping its row.
+ */
+export const chatMessageSchema = z.object({
+  id: idSchema,
+  projectId: idSchema,
+  questId: idSchema.nullable(),
+  kind: messageKindSchema,
+  author: userRefSchema.nullable(),
+  familiarId: z.number().int().nullable(),
+  body: z.string(),
+  payload: z.unknown().nullable(),
+  promotedQuest: z
+    .object({
+      id: idSchema,
+      number: z.number().int(),
+      title: z.string(),
+    })
+    .nullable(),
+  createdAt: timestampSchema,
+  deletedAt: timestampSchema.nullable(),
+});
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
+/** Chat message page query (`before` cursor, limit 1-100, default 50). */
+export const messagePageQuerySchema = z.object({
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MESSAGE_PAGE_MAX)
+    .default(MESSAGE_PAGE_DEFAULT),
+});
+export type MessagePageQuery = z.infer<typeof messagePageQuerySchema>;
+
+/** A page of chat messages, oldest first. */
+export const messagePageResponseSchema = z.object({
+  messages: z.array(chatMessageSchema),
+  hasMore: z.boolean(),
+});
+export type MessagePageResponse = z.infer<typeof messagePageResponseSchema>;
+
+/** `POST /api/.../messages` request. */
+export const postMessageRequestSchema = z.object({
+  body: z.string().trim().min(1).max(MESSAGE_MAX_LENGTH),
+});
+export type PostMessageRequest = z.infer<typeof postMessageRequestSchema>;
+
+/** `POST /api/.../messages/:id/quest` request (채팅에서 의뢰 만들기). */
+export const createQuestFromChatRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  situation: z.string().max(20_000).optional(),
+  sourceMessageId: idSchema.optional(),
+});
+export type CreateQuestFromChatRequest = z.infer<
+  typeof createQuestFromChatRequestSchema
+>;
+
+/** `POST /api/.../messages/:id/quest` response. */
+export const createQuestFromChatResponseSchema = z.object({
+  quest: questSchema,
+  message: chatMessageSchema,
+});
+export type CreateQuestFromChatResponse = z.infer<
+  typeof createQuestFromChatResponseSchema
+>;
+
+/** `GET /api/projects/:pid/unread` response (stacked unread badges). */
+export const chatUnreadResponseSchema = z.object({
+  tavern: z.number().int(),
+  quests: z.array(
+    z.object({
+      questId: idSchema,
+      count: z.number().int(),
+    }),
+  ),
+});
+export type ChatUnreadResponse = z.infer<typeof chatUnreadResponseSchema>;
+
+/** `POST /api/projects/:pid/read` request (mark a chat room read). */
+export const markReadRequestSchema = z.object({
+  questId: idSchema.nullable(),
+  messageId: idSchema,
+});
+export type MarkReadRequest = z.infer<typeof markReadRequestSchema>;
 
 /** My pending nomination together with the quest it belongs to. */
 export const myNominationSchema = nominationSchema.extend({

@@ -103,6 +103,32 @@ const MY_NOMINATION: MyNomination = {
 
 const MY_NOMINATIONS: MyNomination[] = [MY_NOMINATION];
 
+const TAVERN_MENTION: Notification = {
+  id: 21,
+  projectId: 4,
+  questId: null,
+  questNumber: null,
+  questTitle: null,
+  type: "mentioned",
+  actor: { id: 2, displayName: "이모험" },
+  payload: { excerpt: "안녕하세요" },
+  createdAt: NOW - 10_000,
+  readAt: null,
+};
+
+const PARTY_MENTION: Notification = {
+  id: 22,
+  projectId: 4,
+  questId: 9,
+  questNumber: 12,
+  questTitle: "로그인 버그",
+  type: "mentioned",
+  actor: { id: 2, displayName: "이모험" },
+  payload: { excerpt: "확인 부탁해" },
+  createdAt: NOW - 20_000,
+  readAt: null,
+};
+
 const PROJECT_DETAIL: ProjectDetailResponse = {
   project: { id: 4, name: "달빛 길드", createdAt: 1 },
   members: [
@@ -135,8 +161,19 @@ function noContentResponse(): Response {
 }
 
 /** Stateful notification/party API stub shared by the bell tests. */
-function stubApi(options: { meFails?: boolean } = {}) {
-  let unreadCount = 2;
+function stubApi(
+  options: {
+    meFails?: boolean;
+    /** Custom notification rows (defaults to {@link NOTIFICATIONS}). */
+    notifications?: Notification[];
+    unreadCount?: number;
+  } = {},
+) {
+  const notifications = options.notifications ?? NOTIFICATIONS;
+  let unreadCount =
+    options.unreadCount ??
+    notifications.filter((notification) => notification.readAt === null)
+      .length;
   let allRead = false;
 
   const fetchMock = vi.fn(
@@ -150,8 +187,8 @@ function stubApi(options: { meFails?: boolean } = {}) {
       if (method === "GET" && url === "/api/notifications?limit=50") {
         return jsonResponse({
           items: allRead
-            ? NOTIFICATIONS.map((item) => ({ ...item, readAt: NOW }))
-            : NOTIFICATIONS,
+            ? notifications.map((item) => ({ ...item, readAt: NOW }))
+            : notifications,
           unreadCount,
         });
       }
@@ -247,9 +284,9 @@ function renderMenu(initialPath = "/g/4") {
 
 async function openMenu(view: ReturnType<typeof renderMenu>) {
   await waitFor(() => {
-    expect(view.getByTestId("notification-unread-badge")).toHaveTextContent(
-      "2",
-    );
+    expect(
+      view.getByTestId("notification-unread-badge"),
+    ).toBeInTheDocument();
   });
   await view.user.click(
     view.getByRole("button", { name: ko.notifications.label }),
@@ -443,6 +480,56 @@ describe("NotificationsMenu", () => {
       expect(readCall).toBeDefined();
     });
     expect(JSON.parse(String(readCall?.[1]?.body))).toEqual({ ids: [2] });
+  });
+
+  it("opens the tavern for a mentioned notification without a quest", async () => {
+    const fetchMock = stubApi({
+      notifications: [TAVERN_MENTION],
+      unreadCount: 1,
+    });
+    const view = renderMenu();
+    await openMenu(view);
+
+    const row = await view.findByTestId("notification-21");
+    const sentence =
+      '이모험 가 주점에서 나를 불렀습니다: "안녕하세요"';
+    expect(within(row).getByText(sentence)).toBeInTheDocument();
+
+    await view.user.click(within(row).getByText(sentence));
+
+    await waitFor(() => {
+      expect(view.getByTestId("location").textContent).toBe("/g/4/tavern");
+    });
+
+    const readCall = findCall(fetchMock, "/api/notifications/read", "POST");
+    await waitFor(() => expect(readCall).toBeDefined());
+    expect(JSON.parse(String(readCall?.[1]?.body))).toEqual({ ids: [21] });
+  });
+
+  it("opens the quest drawer for a mentioned notification in party chat", async () => {
+    const fetchMock = stubApi({
+      notifications: [PARTY_MENTION],
+      unreadCount: 1,
+    });
+    const view = renderMenu();
+    await openMenu(view);
+
+    const row = await view.findByTestId("notification-22");
+    const sentence =
+      '이모험 가 #12 \'로그인 버그\' 파티 채팅에서 나를 불렀습니다: "확인 부탁해"';
+    expect(within(row).getByText(sentence)).toBeInTheDocument();
+
+    await view.user.click(within(row).getByText(sentence));
+
+    await waitFor(() => {
+      expect(view.getByTestId("location").textContent).toBe(
+        "/g/4?quest=9",
+      );
+    });
+
+    const readCall = findCall(fetchMock, "/api/notifications/read", "POST");
+    await waitFor(() => expect(readCall).toBeDefined());
+    expect(JSON.parse(String(readCall?.[1]?.body))).toEqual({ ids: [22] });
   });
 });
 

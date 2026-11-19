@@ -22,6 +22,7 @@ import {
 import { accept, fetchMyNominations } from "../api/party";
 import { ko } from "../i18n/ko";
 import { queryKeys } from "../lib/queryKeys";
+import { routePaths } from "../router";
 import Icon from "./Icon";
 import PassReasonDialog from "./PassReasonDialog";
 import { Button } from "./ui";
@@ -164,7 +165,13 @@ export function NotificationsMenu({ className }: NotificationsMenuProps) {
 
     const guildPath = `/g/${notification.projectId}`;
     if (notification.questId === null) {
-      navigate(guildPath);
+      // A tavern mention has no quest to open; take the adventurer to the
+      // 주점 room where the sentence was spoken.
+      navigate(
+        notification.type === "mentioned"
+          ? routePaths.tavern(notification.projectId)
+          : guildPath,
+      );
       return;
     }
     navigate(`${guildPath}?quest=${notification.questId}`);

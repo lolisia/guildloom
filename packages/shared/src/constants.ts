@@ -98,6 +98,12 @@ export const F1_NOTIFICATION_TYPES = ["clear_revoked"] as const;
 /** An F1 notification type. */
 export type F1NotificationType = (typeof F1_NOTIFICATION_TYPES)[number];
 
+/** Notification types added in M2b (chat mentions). */
+export const M2B_NOTIFICATION_TYPES = ["mentioned"] as const;
+
+/** An M2b notification type. */
+export type M2BNotificationType = (typeof M2B_NOTIFICATION_TYPES)[number];
+
 /**
  * Every in-app notification type.
  *
@@ -108,10 +114,32 @@ export type F1NotificationType = (typeof F1_NOTIFICATION_TYPES)[number];
 export const NOTIFICATION_TYPES = [
   ...LEGACY_NOTIFICATION_TYPES,
   ...F1_NOTIFICATION_TYPES,
+  ...M2B_NOTIFICATION_TYPES,
 ] as const;
 
 /** A notification type. */
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+/** How a chat message came in: written by an adventurer or posted by the system. */
+export const MESSAGE_KINDS = ["user", "system"] as const;
+
+/** A chat message kind. */
+export type MessageKind = (typeof MESSAGE_KINDS)[number];
+
+/** Longest allowed chat message body, in characters. */
+export const MESSAGE_MAX_LENGTH = 4000;
+
+/** Chat message page size used when a request omits `limit`. */
+export const MESSAGE_PAGE_DEFAULT = 50;
+
+/** Largest chat message page a request may ask for. */
+export const MESSAGE_PAGE_MAX = 100;
+
+/** Most mentioned adventurers notified per chat message. */
+export const MENTION_NOTIFY_MAX = 20;
+
+/** Unread counts at or above this are displayed as `99+`. */
+export const UNREAD_DISPLAY_CAP = 99;
 
 /** Reasons recorded in the XP ledger. */
 export const XP_REASONS = ["clear", "requester", "guide", "revoke"] as const;

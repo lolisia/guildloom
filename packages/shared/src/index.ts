@@ -10,5 +10,6 @@ export * from "./checklist.js";
 export * from "./constants.js";
 export * from "./events.js";
 export * from "./level.js";
+export * from "./mentions.js";
 export * from "./rewards.js";
 export * from "./sprites.js";

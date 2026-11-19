@@ -53,6 +53,10 @@ const notificationTemplates = {
   quest_cleared: (quest: string): string => `${quest}를 클리어했습니다.`,
   clear_revoked: (actor: string, quest: string, xpRevoked: number): string =>
     `${actor}님이 ${quest}의 클리어를 취소했습니다. (XP ${xpRevoked.toLocaleString("ko-KR")} 회수)`,
+  mentioned: (actor: string, quest: string | null, excerpt: string): string =>
+    quest === null
+      ? `${actor} 가 주점에서 나를 불렀습니다: "${excerpt}"`
+      : `${actor} 가 ${quest} 파티 채팅에서 나를 불렀습니다: "${excerpt}"`,
 };
 
 /** XP taken back by a `clear_revoked` notification payload. */
@@ -62,6 +66,15 @@ function revokedXp(payload: unknown): number {
   }
   const value = (payload as { xpRevoked?: unknown }).xpRevoked;
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/** Message excerpt quoted by a `mentioned` notification payload. */
+function mentionExcerpt(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    return "";
+  }
+  const value = (payload as { excerpt?: unknown }).excerpt;
+  return typeof value === "string" ? value : "";
 }
 
 /** Render a notification row (and its toast) as one Korean sentence. */
@@ -91,6 +104,12 @@ function formatNotification(notification: Notification): string {
         actor,
         quest,
         revokedXp(notification.payload),
+      );
+    case "mentioned":
+      return notificationTemplates.mentioned(
+        actor,
+        notification.questId === null ? null : quest,
+        mentionExcerpt(notification.payload),
       );
   }
 }
@@ -222,6 +241,7 @@ export const ko = {
   },
   tabs: {
     board: "게시판",
+    tavern: "주점",
     ledger: "원장",
     settings: "길드 설정",
     createGuild: "새 길드",
@@ -270,6 +290,8 @@ export const ko = {
     dragHint: "카드를 끌어 단계를 옮길 수 있습니다.",
     moveFailed: "의뢰를 옮기지 못했습니다.",
     questCount: (count: number): string => `${count}건`,
+    /** Unread party-chat chip on a quest card (`99+` above the cap). */
+    unreadMessages: (count: number | string): string => `새 글 ${count}`,
     bulk: {
       title: "여러 의뢰 등록",
       description:
@@ -294,7 +316,6 @@ export const ko = {
       floorRatio: (done: number, total: number): string => `${done}/${total}`,
       progressPercent: (percent: number): string => `${percent}%`,
       history: "모험 기록",
-      keyEventsEmpty: "아직 큰 사건은 없습니다",
       showAllHistory: (count: number): string => `전체 기록 보기 (${count})`,
       archive: "의뢰 내리기",
       archiveConfirm: "이 의뢰를 내릴까요?",
@@ -534,6 +555,38 @@ export const ko = {
     submit: "패스하기",
     submitting: "넘기는 중…",
     failed: "지목을 넘기지 못했습니다.",
+  },
+  chat: {
+    title: "주점",
+    tavernPlaceholder:
+      "주점에 말 걸기 — @이름으로 부르기, /의뢰 제목 으로 의뢰 등록",
+    tavernEmpty: "아직 주점이 조용합니다.",
+    loadMore: "이전 메시지 더 보기",
+    send: "보내기",
+    sending: "보내는 중…",
+    sendFailed: "메시지를 보내지 못했습니다.",
+    deleted: "삭제된 메시지입니다.",
+    viewQuest: (questNumber: number): string => `#${questNumber} 보기`,
+    promoted: (questNumber: number): string => `#${questNumber}로 등록됨`,
+    promote: "의뢰로 만들기",
+    deleteConfirm: "메시지를 삭제할까요?",
+    deleteFailed: "메시지를 삭제하지 못했습니다.",
+    mentionList: "모험가 목록",
+    questDialogTitle: "의뢰로 만들기",
+    questTitle: "제목",
+    questSituation: "현재 상황",
+    questSubmit: "의뢰 등록",
+    questSubmitting: "등록 중…",
+    questCreated: (questNumber: number, title: string): string =>
+      `의뢰 #${questNumber} '${title}' 을 게시판에 올렸습니다.`,
+    questCreateFailed: "의뢰를 등록하지 못했습니다.",
+    alreadyPromoted: "이미 의뢰로 등록된 메시지입니다.",
+    commandTitleRequired: "제목을 적어 주세요: /의뢰 제목",
+    unreadBadge: (count: number): string => `읽지 않은 메시지 ${count}개`,
+  },
+  partyChat: {
+    title: "파티 채팅",
+    composerPlaceholder: "파티에게 한마디 — @이름으로 부르기",
   },
   party: {
     title: "파티",

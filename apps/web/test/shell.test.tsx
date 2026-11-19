@@ -229,6 +229,21 @@ function renderApp(initialPath: string, options: RenderOptions = {}) {
         return jsonResponse(projects);
       }
 
+      // The tab bar and the 주점 route ask for unread badges and the tavern
+      // page; keep those calls quiet in the routing smoke tests.
+      if (method === "GET" && /^\/api\/projects\/\d+\/chat\/unread$/.test(url)) {
+        return jsonResponse({ tavern: 0, quests: [] });
+      }
+      if (method === "GET" && /^\/api\/projects\/\d+\/tavern\/messages/.test(url)) {
+        return jsonResponse({ messages: [], hasMore: false });
+      }
+      if (method === "GET" && /^\/api\/projects\/\d+$/.test(url)) {
+        return jsonResponse({
+          project: { id: 1, name: "달빛 길드", createdAt: 1 },
+          members: [],
+        });
+      }
+
       if (key === "POST /api/auth/logout") {
         return noContentResponse();
       }
@@ -313,10 +328,17 @@ describe("router guards", () => {
     await expectPath(view, "/g/1");
   });
 
-  it("exposes the board, ledger and settings routes", async () => {
+  it("exposes the board, tavern, ledger and settings routes", async () => {
     const board = renderApp("/g/1", { me: HERO });
     await expectPath(board, "/g/1");
     board.unmount();
+
+    const tavern = renderApp("/g/1/tavern", { me: HERO });
+    await expectPath(tavern, "/g/1/tavern");
+    expect(
+      await tavern.findByRole("heading", { name: ko.chat.title }),
+    ).toBeInTheDocument();
+    tavern.unmount();
 
     const ledger = renderApp("/g/1/ledger", { me: HERO });
     await expectPath(ledger, "/g/1/ledger");
@@ -972,6 +994,9 @@ describe("queryKeys", () => {
     expect(queryKeys.tags(4)).toEqual(["tags", 4, ""]);
     expect(queryKeys.tags(4, "긴급")).toEqual(["tags", 4, "긴급"]);
     expect(queryKeys.invites(4)).toEqual(["invites", 4]);
+    expect(queryKeys.tavernMessages(4)).toEqual(["tavernMessages", 4]);
+    expect(queryKeys.questMessages(9)).toEqual(["questMessages", 9]);
+    expect(queryKeys.chatUnread(4)).toEqual(["chatUnread", 4]);
   });
 });
 
@@ -1017,6 +1042,25 @@ describe("ko copy", () => {
     expect(ko.invite.title).toBe("길드 초대");
     expect(ko.settings.title).toBe("길드 설정");
     expect(ko.errors.generic.length).toBeGreaterThan(0);
+  });
+
+  it("contains the 주점 copy and the exact tavern placeholder", () => {
+    expect(ko.tabs.tavern).toBe("주점");
+    expect(ko.chat.title).toBe("주점");
+    expect(ko.chat.tavernEmpty).toBe("아직 주점이 조용합니다.");
+    expect(ko.chat.tavernPlaceholder).toBe(
+      "주점에 말 걸기 — @이름으로 부르기, /의뢰 제목 으로 의뢰 등록",
+    );
+    expect(ko.chat.deleteConfirm).toBe("메시지를 삭제할까요?");
+    expect(ko.chat.alreadyPromoted).toBe(
+      "이미 의뢰로 등록된 메시지입니다.",
+    );
+    expect(ko.chat.commandTitleRequired).toBe(
+      "제목을 적어 주세요: /의뢰 제목",
+    );
+    expect(ko.chat.questCreated(12, "로그인 버그")).toBe(
+      "의뢰 #12 '로그인 버그' 을 게시판에 올렸습니다.",
+    );
   });
 
   it("formats relative time in Korean", () => {
