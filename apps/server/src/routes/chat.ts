@@ -187,12 +187,10 @@ function parseMessagePayload(payload: string | null): unknown {
 function toChatMessage(row: MessageJoinRow): ChatMessage {
   const { message } = row;
 
-  // A system message never exposes its actor through `author`; the actor is
-  // carried by the payload (`quest_created`) instead.
+  // A system message exposes the member whose action produced it as `author`
+  // (the requester of a `quest_created` line), so clients can name the actor.
   const author =
-    message.kind === "user" &&
-    row.authorId !== null &&
-    row.authorDisplayName !== null
+    row.authorId !== null && row.authorDisplayName !== null
       ? { id: row.authorId, displayName: row.authorDisplayName }
       : null;
 

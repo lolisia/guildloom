@@ -249,7 +249,7 @@ describe("MessageList", () => {
     message({
       id: 5,
       kind: "system",
-      author: null,
+      author: { id: 1, displayName: "김모험" },
       body: "system",
       createdAt: NOW + 21 * 60_000,
       payload: {
@@ -349,7 +349,8 @@ describe("MessageList", () => {
     ) as HTMLElement;
     expect(system.getAttribute("data-message-kind")).toBe("system");
     expect(system.querySelector('[role="img"]')).toBeNull();
-    expect(system).toHaveTextContent("의뢰 #12 '로그인 버그'");
+    expect(system).toHaveTextContent("김모험 가 의뢰 #12 '로그인 버그'");
+    expect(system).not.toHaveTextContent("누군가");
     const systemLink = within(system).getByRole("link", {
       name: ko.chat.viewQuest(12),
     });

@@ -803,7 +803,7 @@ describe("chat routes", () => {
       expect(result.message).toMatchObject({
         kind: "system",
         questId: null,
-        author: null,
+        author: { id: fixture.owner.id, displayName: "길드장" },
         body: "",
         payload: {
           type: "quest_created",
@@ -844,6 +844,7 @@ describe("chat routes", () => {
       expect(entries[1]).toMatchObject({
         id: result.message.id,
         kind: "system",
+        author: { id: fixture.owner.id, displayName: "길드장" },
         body: "",
         payload: result.message.payload,
         promotedQuest: {
@@ -961,6 +962,12 @@ describe("chat routes", () => {
         situation: "상황 설명",
         kind: "fix",
         createdBy: { id: fixture.member.id },
+      });
+      expect(result.message).toMatchObject({
+        kind: "system",
+        questId: null,
+        author: { id: fixture.member.id, displayName: "김철수" },
+        body: "",
       });
       expect(result.message.payload).toEqual({
         type: "quest_created",
